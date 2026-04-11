@@ -632,10 +632,14 @@ buildDesignplotServer <- function(input, output) {
   autoPersistPlanId <- reactive({
     model_name <- currentFieldModelName()
     if (is.null(model_name) || !nzchar(trimws(model_name))) model_name <- "default"
-    safe_name <- gsub("[^A-Za-z0-9_-]+", "_", enc2utf8(model_name))
-    safe_name <- trimws(safe_name)
-    if (!nzchar(safe_name)) safe_name <- "default"
-    paste0("auto_plan_", safe_name)
+    safe_model <- gsub("[^A-Za-z0-9_-]+", "_", enc2utf8(model_name))
+    safe_model <- trimws(safe_model)
+    if (!nzchar(safe_model)) safe_model <- "default"
+    exp_name <- currentExperimentName()
+    safe_exp <- gsub("[^A-Za-z0-9_-]+", "_", enc2utf8(exp_name))
+    safe_exp <- trimws(safe_exp)
+    if (!nzchar(safe_exp)) safe_exp <- "default"
+    paste0("auto_plan_", safe_model, "_", safe_exp)
   })
 
   matrixSignature <- function(mat, data_cols = NULL) {
@@ -1058,7 +1062,9 @@ buildDesignplotServer <- function(input, output) {
     } else {
       currentExperimentName()
     }
-    plan_result <- savePlanToSqlite(plan_matrix = base_matrix, experiment_name = exp_name, db_path = sqlite_db_path, plan_id = NULL, metadata = buildPersistenceMeta())
+    # Use experiment-aware auto plan_id to avoid creating duplicate plans for the same experiment
+    stable_plan_id <- autoPersistPlanId()
+    plan_result <- savePlanToSqlite(plan_matrix = base_matrix, experiment_name = exp_name, db_path = sqlite_db_path, plan_id = stable_plan_id, metadata = buildPersistenceMeta())
     latest_plan_id(plan_result$plan_id)
     saveAssignmentsToSqlite(plan_id = plan_result$plan_id, planted_matrix = planted, plan_matrix = base_matrix, experiment_name = exp_name, db_path = sqlite_db_path)
     saveExperimentPlantRun(experiment_id = exp_id, plant_table_name = selected_plant_table, sow_table_name = sow_result$table_name,
