@@ -166,7 +166,7 @@ buildDesignplotServer <- function(input, output) {
   })
 
   # ===========================================================================
-  # 地块模型选择 -> 加载参数（合并为一个 observeEvent）
+  # 地块模型选择 -> 加载参数
   # ===========================================================================
   observeEvent(input$field_model_select, {
     req(nzchar(trimws(input$field_model_select)))
@@ -292,6 +292,7 @@ buildDesignplotServer <- function(input, output) {
     experimentsTrigger(experimentsTrigger() + 1L)
     recordsTrigger(recordsTrigger() + 1L)
     sowTrigger(sowTrigger() + 1L)
+    plantTableTrigger(plantTableTrigger() + 1L)
   }
 
   # ===========================================================================
@@ -539,6 +540,7 @@ buildDesignplotServer <- function(input, output) {
   })
 
   datasetInput <- reactive({
+    fieldModelTrigger()
     req(isTRUE(planningInputsHydrated()))
     validate(
       need(nchar(input$get_water_columns) > 0, "请输入田间布局（如 w/8/w）"),
@@ -604,8 +606,8 @@ buildDesignplotServer <- function(input, output) {
     }
     if (!is.null(start_pos) && !is.na(start_pos)) updateTextInput(inputId = "plant_start_pos", value = as.character(start_pos))
     if (!is.null(end_pos) && !is.na(end_pos)) updateTextInput(inputId = "plant_end_pos", value = as.character(end_pos))
-    updateRadioButtons(inputId = "design_from_left", selected = as.logical(model$plan_left))
-    updateRadioButtons(inputId = "plant_from_left", selected = as.logical(model$plant_left))
+    updateRadioButtons(inputId = "design_from_left", selected = ifelse(!is.na(model$plan_left), as.logical(model$plan_left), TRUE))
+    updateRadioButtons(inputId = "plant_from_left", selected = ifelse(!is.na(model$plant_left), as.logical(model$plant_left), TRUE))
     invisible(NULL)
   }
 
@@ -1002,7 +1004,8 @@ buildDesignplotServer <- function(input, output) {
   })
 
   output$experimentPlantSummaryUi <- renderUI({
-    state <- experimentPlantValidation()
+    state <- tryCatch(experimentPlantValidation(), error = function(e) NULL)
+    req(state)
     style <- switch(state$level,
                     "info" = "background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:8px 10px;margin-bottom:8px;color:#3730a3;",
                     "neutral" = "background:#f8fafc;border:1px solid #dbe4ee;border-radius:8px;padding:8px 10px;margin-bottom:8px;color:#475569;",
@@ -1014,7 +1017,8 @@ buildDesignplotServer <- function(input, output) {
   })
 
   output$runExperimentPlantingUi <- renderUI({
-    state <- experimentPlantValidation()
+    state <- tryCatch(experimentPlantValidation(), error = function(e) NULL)
+    req(state)
     if (isTRUE(state$runnable)) {
       actionButton("runExperimentPlanting", "执行试验种植", class = "btn-primary", width = "100%")
     } else {

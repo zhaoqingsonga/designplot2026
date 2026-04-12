@@ -22,21 +22,21 @@ buildDesignplotUI <- function(){
                               style = "background:#ffffff;border:1px solid #dbe4ee;border-radius:10px;padding:10px 12px;margin-bottom:10px;",
                               tags$div("基础参数", style = "font-size:15px;font-weight:600;color:#1f2937;margin-bottom:6px;"),
                               tags$p("建议先设置以下参数，再查看右侧设计表。", style = "margin:0 0 6px 0;color:#6b7280;font-size:12px;"),
-                              numericInput("f_l", h5("规划地长(m)"), value = 200),
-                              textInput("get_water_columns", h5("田间纵向布局"), value="w/8/w", placeholder = "示例：w/8/w"),
+                              numericInput("f_l", h5("规划地长(m)"), value = NA),
+                              textInput("get_water_columns", h5("田间纵向布局"), value="", placeholder = "示例：w/8/w"),
                               tags$p("规则：w=水沟；r=纵向观察道（2r=1.5米）；p=保护行（可加数字）；斜杠间数字代表水沟间行数。", style = "margin-top:-6px;color:#6b7280;font-size:12px;line-height:1.6;"),
-                              textInput("bridges", h5("条带宽度设置"), value="10,6/3,10", placeholder = "示例：10,6/3,10"),
+                              textInput("bridges", h5("条带宽度设置"), value="", placeholder = "示例：10,6/3,10"),
                               tags$p("规则：\"/\"前为长度，\"/\"后为重复数。", style = "margin-top:-6px;color:#6b7280;font-size:12px;")
                             ),
                             tags$div(
                               style = "background:#ffffff;border:1px solid #dbe4ee;border-radius:10px;padding:10px 12px;margin-bottom:10px;",
                               tags$div("通道与间隔", style = "font-size:15px;font-weight:600;color:#1f2937;margin-bottom:6px;"),
-                              numericInput("ww", h5("田间横向观察道宽(m)"), value = 1, min = 0),
-                              numericInput("w", h5("材料间隔距离(m)"), value = .5, min = 0),
-                              numericInput("subg", h5("材料按组种植（组内材料不隔断）"), value = 1, min = 1),
+                              numericInput("ww", h5("田间横向观察道宽(m)"), value = NA, min = 0),
+                              numericInput("w", h5("材料间隔距离(m)"), value = NA, min = 0),
+                              numericInput("subg", h5("材料按组种植（组内材料不隔断）"), value = NA, min = 1),
                               tags$div(style = "height:6px;"),
                               tags$div("种植位置设置", style = "font-size:14px;font-weight:600;color:#1f2937;margin-bottom:4px;"),
-                              textInput("plant_start_pos", h5("种植起始位置（行,列）"), value = "1,1", placeholder = "示例：1,1 / 1, / ,3 / 1"),
+                              textInput("plant_start_pos", h5("种植起始位置（行,列）"), value = "", placeholder = "示例：1,1 / 1, / ,3 / 1"),
                               textInput("plant_end_pos", h5("种植终止位置（行,列；留空=最后）"), value = "", placeholder = "示例：10,8 / 10, / ,8 / 10"),
                               tags$p("规则：格式 n,n（行,列）；起始留空默认 1,1；终止留空默认到最后。只控行可写 n 或 n,；只控列请写 ,n。", style = "margin-top:-6px;color:#6b7280;font-size:12px;line-height:1.6;")
                             ),
@@ -45,7 +45,7 @@ buildDesignplotUI <- function(){
                               tags$div(style = "margin-top:8px;"),
                               textInput("p_a", h5("不可种植区（可选）"), value="", placeholder = "示例：23,25,3,5,30,40,7,10"),
                               tags$p("规则：每4个数一组，依次为起始位置m、终止位置m、起始行、终止行。", style = "margin-top:-6px;color:#6b7280;font-size:12px;"),
-                              textInput("protected_blocks",h5("横向保护行([-99])"),value="1")
+                              textInput("protected_blocks",h5("横向保护行([-99])"),value="")
                             ),
                             tags$details(
                               tags$summary("编码图例（点击展开）"),
@@ -79,7 +79,7 @@ buildDesignplotUI <- function(){
                             tags$hr()
                           , width = 3),
                           mainPanel(
-                            h3("设计表"), textOutput("selected_var"), DT::dataTableOutput("mydata"), downloadButton("downloadData", "下载设计表（xlsx）"),
+                            h3("设计表"), textOutput("selected_var"), downloadButton("downloadData", "下载设计表（xlsx）"),
                             h3("设计简表"), DT::dataTableOutput("simpleMydata"), downloadButton("simpleDownloadData", "下载设计简表（xlsx）"),
                             h3("行数统计"), DT::dataTableOutput("sta")
                           , width = 9)
