@@ -203,7 +203,7 @@ buildDesignplotServer <- function(input, output) {
   })
 
   # ===========================================================================
-  # 观察者：种植地块下拉框
+  # 观察者：种植地块下拉框（仅初始化/刷新时更新自己的两个下拉）
   # ===========================================================================
   observe({
     tables_df <- plantTables()
@@ -221,8 +221,6 @@ buildDesignplotServer <- function(input, output) {
     updateSelectInput(session = getDefaultReactiveDomain(), inputId = "experimentPlantTableSelect", choices = choices, selected = exp_selected)
   })
 
-  # ===========================================================================
-  # 观察者：播种表下拉框
   # ===========================================================================
   observe({
     tables <- sowTables()
@@ -269,9 +267,9 @@ buildDesignplotServer <- function(input, output) {
       updateSelectInput(session = getDefaultReactiveDomain(), inputId = "layout_field_select", choices = c("暂无地块" = ""), selected = "")
       return()
     }
-    choices <- stats::setNames(as.character(tables_df$table_name), as.character(tables_df$field_name))
-    current <- trimws(input$layout_field_select)
-    selected <- if (nzchar(current) && current %in% unname(choices)) current else unname(choices)[1]
+    choices <- stats::setNames(as.character(tables_df$field_name), as.character(tables_df$field_name))
+    current <- input$layout_field_select
+    selected <- if (!is.null(current) && nzchar(trimws(current)) && current %in% names(choices)) current else as.character(tables_df$field_name[1])
     updateSelectInput(session = getDefaultReactiveDomain(), inputId = "layout_field_select", choices = choices, selected = selected)
   })
 
