@@ -14,7 +14,10 @@ buildDesignplotUI <- function(){
                                 column(4, actionButton("deleteFieldModel", "删除参数", class = "btn-danger", width = "100%"))
                               ),
                               tags$div(style = "height:8px;"),
-                              actionButton("generatePlantField", "创建地块", class = "btn-info", width = "100%"),
+                              fluidRow(
+                                column(6, actionButton("generatePlantField", "创建地块", class = "btn-info", width = "100%")),
+                                column(6, actionButton("deletePlantField", "删除地块", class = "btn-danger", width = "100%"))
+                              ),
                               tags$div("提示：设计表会实时更新；\"保存\"仅保存地块模板参数，\"创建地块\"才会写入可用于种植的地块表。", style = "font-size:12px;color:#6b7280;margin-top:8px;line-height:1.6;")
                             ),
                             tags$div(

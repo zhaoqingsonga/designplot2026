@@ -568,6 +568,31 @@ readPlantTable <- function(table_name, db_path = defaultSqlitePath()) {
   as.matrix(df)
 }
 
+deletePlantTable <- function(field_name, db_path = defaultSqlitePath()) {
+  if (is.null(field_name) || !nzchar(trimws(field_name))) stop("地块名不能为空")
+  plant_table <- createPlantTableName(field_name)
+  con <- connectDesignplotDb(db_path)
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
+  initDesignplotDb(con)
+
+  # 检查表是否存在
+  tables <- DBI::dbListTables(con)
+  if (!(plant_table %in% tables)) {
+    stop(paste0("种植地块表不存在: ", plant_table))
+  }
+
+  # 删除地块表
+  DBI::dbExecute(con, sprintf("DROP TABLE `%s`", plant_table))
+
+  # 清理相关的种植运行记录
+  clearExperimentPlantRunByTable(plant_table, db_path)
+
+  # 清理相关的播种表
+  clearSowTableByPlantTable(plant_table, db_path)
+
+  invisible(TRUE)
+}
+
 # ---- 播种表（优化：向量化构建）----
 buildSowTable <- function(field_name, base_matrix, planted_matrix = base_matrix) {
   if (is.null(field_name) || !nzchar(trimws(field_name))) stop("地块名不能为空")

@@ -203,7 +203,7 @@ buildDesignplotServer <- function(input, output) {
   })
 
   # ===========================================================================
-  # 观察者：种植地块下拉框（仅初始化/刷新时更新自己的两个下拉）
+  # 观察者：种植地块下拉框
   # ===========================================================================
   observe({
     tables_df <- plantTables()
@@ -216,6 +216,7 @@ buildDesignplotServer <- function(input, output) {
     current <- trimws(input$plant_table_select)
     selected <- if (nzchar(current) && current %in% names(choices)) current else as.character(tables_df$table_name[1])
     updateSelectInput(session = getDefaultReactiveDomain(), inputId = "plant_table_select", choices = choices, selected = selected)
+    # 同步 experimentPlantTableSelect
     exp_current <- trimws(input$experimentPlantTableSelect)
     exp_selected <- if (nzchar(exp_current) && exp_current %in% names(choices)) exp_current else selected
     updateSelectInput(session = getDefaultReactiveDomain(), inputId = "experimentPlantTableSelect", choices = choices, selected = exp_selected)
@@ -356,6 +357,47 @@ buildDesignplotServer <- function(input, output) {
       refreshAllSqlite()
     }, error = function(e) {
       showNotification(paste0("地块模型删除失败: ", e$message), type = "error")
+    })
+  })
+
+  observeEvent(input$deletePlantField, {
+    target_name <- currentFieldModelName()
+    plant_table_name <- createPlantTableName(target_name)
+
+    # 检查地块表是否存在
+    tables_df <- listPlantTables(sqlite_db_path)
+    if (!is.data.frame(tables_df) || nrow(tables_df) == 0 ||
+        !(plant_table_name %in% tables_df$table_name)) {
+      showNotification("该地块尚未创建，无需删除", type = "warning")
+      return()
+    }
+
+    showModal(modalDialog(
+      title = "确认删除地块",
+      tags$div(
+        tags$p(paste0("确定要删除地块「", target_name, "」吗？"), style = "margin:0 0 6px 0;"),
+        tags$p("此操作将删除：", style = "margin:0 0 4px 0;font-weight:600;"),
+        tags$ul(style = "margin:0 0 6px 0;padding-left:20px;",
+          tags$li("种植地块表数据"),
+          tags$li("相关的试验种植记录"),
+          tags$li("相关的播种列表")
+        ),
+        tags$p("删除后不可恢复！", style = "margin:0;color:#dc2626;font-weight:600;")
+      ),
+      footer = tagList(modalButton("取消"), actionButton("confirmDeletePlantField", "确认删除", class = "btn-danger")),
+      easyClose = TRUE
+    ))
+  })
+
+  observeEvent(input$confirmDeletePlantField, {
+    tryCatch({
+      removeModal()
+      deletePlantTable(currentFieldModelName(), sqlite_db_path)
+      showNotification("种植地块删除成功", type = "message")
+      plantTableTrigger(plantTableTrigger() + 1)
+      refreshAllSqlite()
+    }, error = function(e) {
+      showNotification(paste0("种植地块删除失败: ", e$message), type = "error")
     })
   })
 
@@ -766,7 +808,7 @@ buildDesignplotServer <- function(input, output) {
   })
 
   selectedExperimentPlantTableName <- reactive({
-    selected <- trimws(input$experimentPlantTableSelect)
+    selected <- trimws(input$plant_table_select)
     if (!nzchar(selected)) return(NA_character_)
     selected
   })
@@ -823,7 +865,7 @@ buildDesignplotServer <- function(input, output) {
 
   experimentFillPreview <- reactive({
     exp_id <- trimws(input$sqliteFilterExperimentId)
-    table_name <- trimws(input$experimentPlantTableSelect)
+    table_name <- trimws(input$plant_table_select)
     material <- trimws(input$experimentFillMaterial)
     if (!nzchar(exp_id) || !nzchar(table_name)) {
       return(list(level = "info", runnable = FALSE, message = "ℹ️ 补种摘要：请选择试验与种植地块", parsed = NULL, base_matrix = NULL, data_cols = NA_integer_))
@@ -881,7 +923,7 @@ buildDesignplotServer <- function(input, output) {
     rec_count <- if (is.data.frame(rec_df) && nrow(rec_df) > 0) nrow(rec_df) else 0L
     selected_exp <- trimws(input$sqliteFilterExperimentId)
     selected_exp_display <- if (nzchar(selected_exp)) selected_exp else "全部"
-    selected_plant <- trimws(input$experimentPlantTableSelect)
+    selected_plant <- trimws(input$plant_table_select)
     selected_plant_display <- if (nzchar(selected_plant)) selected_plant else "未选"
     hint <- if (!nzchar(selected_exp)) {
       "📋 请先从左侧选择试验ID以筛选数据，或导入新试验"
@@ -953,7 +995,7 @@ buildDesignplotServer <- function(input, output) {
 
   experimentPlantValidation <- reactive({
     exp_id <- trimws(input$sqliteFilterExperimentId)
-    table_name <- trimws(input$experimentPlantTableSelect)
+    table_name <- trimws(input$plant_table_select)
     if (!nzchar(exp_id) || !nzchar(table_name)) {
       return(list(level = "info", runnable = FALSE, message = "ℹ️ 执行摘要：请选择试验与种植地块"))
     }
