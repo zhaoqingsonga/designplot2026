@@ -7,7 +7,7 @@ buildDesignplotUI <- function(){
                             tags$div(
                               style = "background:#f8fafc;border:1px solid #dbe4ee;border-radius:10px;padding:12px 12px 8px 12px;margin-bottom:10px;",
                               tags$div("地块管理", style = "font-size:16px;font-weight:600;color:#1f2937;margin-bottom:8px;"),
-                              selectInput("field_model_select", "当前地块", choices = c("常规地块1" = "常规地块1"), selected = "常规地块1", width = "100%"),
+                              selectInput("field_model_select", "当前参数", choices = c("常规地块1" = "常规地块1"), selected = "常规地块1", width = "100%"),
                               fluidRow(
                                 column(4, actionButton("saveFieldModel", "保存参数", class = "btn-primary", width = "100%")),
                                 column(4, actionButton("addFieldModel", "增加参数", class = "btn-success", width = "100%")),

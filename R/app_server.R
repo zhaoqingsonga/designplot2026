@@ -184,9 +184,19 @@ buildDesignplotServer <- function(input, output) {
   # 观察者：地块模型列表同步
   # ===========================================================================
   observe({
+    plantTableTrigger()
     names_vec <- fieldModelNames()
     if (length(names_vec) == 0) return()
-    choices <- setNames(names_vec, names_vec)
+    tables_df <- plantTables()
+    created_fields <- if (is.data.frame(tables_df) && nrow(tables_df) > 0) {
+      as.character(tables_df$field_name)
+    } else {
+      character()
+    }
+    labels <- ifelse(names_vec %in% created_fields,
+                     paste0(names_vec, "（已创建）"),
+                     names_vec)
+    choices <- setNames(names_vec, labels)
     pending <- pendingFieldModelSelection()
     current <- input$field_model_select
     selected <- if (!is.null(pending) && nzchar(trimws(pending)) && pending %in% names_vec) {
