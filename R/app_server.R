@@ -62,7 +62,7 @@ buildDesignplotServer <- function(input, output) {
                               linetype = type),
                 fill = NA, color = "#111827", linewidth = 1.0) +
       scale_fill_manual(values = fill_values, breaks = names(fill_values), name = "区域") +
-      scale_linetype_manual(values = c("补种" = "22"), name = "叠层") +
+      scale_linetype_manual(values = c("补种" = "22"), breaks = "补种", name = "叠层") +
       scale_x_continuous(name = "行", breaks = seq(0, metrics$total_cols, by = max(1, floor(metrics$total_cols / 10))),
                          limits = c(0, metrics$total_cols + 1)) +
       scale_y_continuous(name = "排", breaks = seq(0, metrics$max_row_id + 2, by = 2),
@@ -242,7 +242,6 @@ buildDesignplotServer <- function(input, output) {
   observe({
     exp_df <- experimentOptions()
     if (!is.data.frame(exp_df) || nrow(exp_df) == 0) {
-      updateSelectInput(session = getDefaultReactiveDomain(), inputId = "experimentPlantId", choices = c("暂无试验" = ""), selected = "")
       updateSelectInput(session = getDefaultReactiveDomain(), inputId = "sqliteFilterExperimentId", choices = c("全部试验" = ""), selected = "")
       return()
     }
@@ -254,10 +253,6 @@ buildDesignplotServer <- function(input, output) {
       ifelse(as.character(exp_df$experiment_id) %in% planted_ids, "✓已种", "○未种")
     )
     choices <- stats::setNames(as.character(exp_df$experiment_id), labels)
-    current <- trimws(input$experimentPlantId)
-    selected <- if (nzchar(current) && current %in% choices) current else as.character(exp_df$experiment_id[1])
-    updateSelectInput(session = getDefaultReactiveDomain(), inputId = "experimentPlantId", choices = choices, selected = selected)
-
     filter_choices <- c("全部试验" = "", choices)
     current_filter <- trimws(input$sqliteFilterExperimentId)
     selected_filter <- if (nzchar(current_filter) && current_filter %in% unname(filter_choices)) current_filter else ""
@@ -800,7 +795,7 @@ buildDesignplotServer <- function(input, output) {
   })
 
   experimentSeedData <- reactive({
-    exp_id <- trimws(input$experimentPlantId)
+    exp_id <- trimws(input$sqliteFilterExperimentId)
     validate(need(nzchar(exp_id), "请先选择试验名称"))
     records <- readTableFromSqlite("experiment_records", sqlite_db_path)
     validate(need(is.data.frame(records) && nrow(records) > 0, "暂无试验记录"))
@@ -829,7 +824,7 @@ buildDesignplotServer <- function(input, output) {
   experimentPlantedState <- reactiveVal(NULL)
 
   experimentFillPreview <- reactive({
-    exp_id <- trimws(input$experimentPlantId)
+    exp_id <- trimws(input$sqliteFilterExperimentId)
     table_name <- trimws(input$experimentPlantTableSelect)
     material <- trimws(input$experimentFillMaterial)
     if (!nzchar(exp_id) || !nzchar(table_name)) {
@@ -959,7 +954,7 @@ buildDesignplotServer <- function(input, output) {
   })
 
   experimentPlantValidation <- reactive({
-    exp_id <- trimws(input$experimentPlantId)
+    exp_id <- trimws(input$sqliteFilterExperimentId)
     table_name <- trimws(input$experimentPlantTableSelect)
     if (!nzchar(exp_id) || !nzchar(table_name)) {
       return(list(level = "info", runnable = FALSE, message = "ℹ️ 执行摘要：请选择试验与种植地块"))
@@ -1033,7 +1028,7 @@ buildDesignplotServer <- function(input, output) {
   runExperimentPlantingImpl <- function(overwrite_mode = FALSE) {
     selected_plant_table <- selectedExperimentPlantTableName()
     validate(need(!is.na(selected_plant_table) && nzchar(selected_plant_table), "请先选择要写入的种植地块"))
-    exp_id <- trimws(input$experimentPlantId)
+    exp_id <- trimws(input$sqliteFilterExperimentId)
     validate(need(nzchar(exp_id), "请先选择试验名称"))
     if (!isTRUE(overwrite_mode) && !isTRUE(input$allowExperimentReplant) &&
         isTRUE(hasExperimentPlantRun(exp_id, selected_plant_table, sqlite_db_path))) {
