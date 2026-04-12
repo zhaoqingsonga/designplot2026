@@ -79,8 +79,7 @@ buildDesignplotUI <- function(){
                             tags$hr()
                           , width = 3),
                           mainPanel(
-                            h3("设计表"), textOutput("selected_var"), downloadButton("downloadData", "下载设计表（xlsx）"),
-                            h3("设计简表"), DT::dataTableOutput("simpleMydata"), downloadButton("simpleDownloadData", "下载设计简表（xlsx）"),
+                            h3("设计简表"), textOutput("selected_var"), DT::dataTableOutput("simpleMydata"), downloadButton("simpleDownloadData", "下载设计简表（xlsx）"),
                             h3("行数统计"), DT::dataTableOutput("sta")
                           , width = 9)
                         )

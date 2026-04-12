@@ -103,6 +103,7 @@ buildDesignplotServer <- function(input, output) {
   autoPersistLastAssignSig <- reactiveVal(NA_character_)
   fieldLayoutCache <- reactiveVal(list(key = NA_character_, data = NULL))
   pendingDeleteExpRowId <- reactiveVal(NULL)
+  isPlantingInProgress <- reactiveVal(FALSE)
 
   # ===========================================================================
   # 元数据与默认值
@@ -292,7 +293,6 @@ buildDesignplotServer <- function(input, output) {
     experimentsTrigger(experimentsTrigger() + 1L)
     recordsTrigger(recordsTrigger() + 1L)
     sowTrigger(sowTrigger() + 1L)
-    plantTableTrigger(plantTableTrigger() + 1L)
   }
 
   # ===========================================================================
@@ -1017,12 +1017,16 @@ buildDesignplotServer <- function(input, output) {
   })
 
   output$runExperimentPlantingUi <- renderUI({
-    state <- tryCatch(experimentPlantValidation(), error = function(e) NULL)
-    req(state)
-    if (isTRUE(state$runnable)) {
-      actionButton("runExperimentPlanting", "执行试验种植", class = "btn-primary", width = "100%")
+    if (isTRUE(isPlantingInProgress())) {
+      actionButton("runExperimentPlanting", "执行中...", class = "btn-default", width = "100%", disabled = "disabled")
     } else {
-      actionButton("runExperimentPlanting", "执行试验种植（先修正上方设置）", class = "btn-default", width = "100%", disabled = "disabled")
+      state <- tryCatch(experimentPlantValidation(), error = function(e) NULL)
+      req(state)
+      if (isTRUE(state$runnable)) {
+        actionButton("runExperimentPlanting", "执行试验种植", class = "btn-primary", width = "100%")
+      } else {
+        actionButton("runExperimentPlanting", "执行试验种植（先修正上方设置）", class = "btn-default", width = "100%", disabled = "disabled")
+      }
     }
   })
 
@@ -1092,19 +1096,25 @@ buildDesignplotServer <- function(input, output) {
           easyClose = TRUE
         ))
       } else {
+        isPlantingInProgress(TRUE)
         runExperimentPlantingImpl(FALSE)
       }
     }, error = function(e) {
       showNotification(paste0("试验种植失败: ", e$message), type = "error")
+    }, finally = {
+      isPlantingInProgress(FALSE)
     })
   })
 
   observeEvent(input$confirmRunExperimentPlanting, {
     tryCatch({
       removeModal()
+      isPlantingInProgress(TRUE)
       runExperimentPlantingImpl(TRUE)
     }, error = function(e) {
       showNotification(paste0("试验种植失败: ", e$message), type = "error")
+    }, finally = {
+      isPlantingInProgress(FALSE)
     })
   })
 
@@ -1305,8 +1315,6 @@ buildDesignplotServer <- function(input, output) {
   # ===========================================================================
   # 下载处理器
   # ===========================================================================
-  output$downloadData <- downloadHandler(filename = function() { "designplot.xlsx" },
-                                          content = function(file) { writeFormattedXlsx(datasetInput(), file) })
   output$simpleDownloadData <- downloadHandler(filename = function() { "simpleDesignplot.xlsx" },
                                                content = function(file) { writeFormattedXlsx(datasetSelected(), file) })
   output$plantPreviewDownloadData <- downloadHandler(
@@ -1325,15 +1333,6 @@ buildDesignplotServer <- function(input, output) {
   # ===========================================================================
   # 输出渲染
   # ===========================================================================
-  output$mydata <- DT::renderDataTable(
-    DT::datatable({ datasetInput() }, extensions = 'KeyTable', options = list(keys = TRUE, pageLength = 50, lengthMenu = DT_PAGE_MENU)) %>%
-      formatStyle(1:w_c()$total_cols, backgroundColor = styleInterval(COLOR_BREAKS, COLOR_VALUES))
-  )
-  output$simpleMydata <- DT::renderDataTable(
-    DT::datatable({ datasetSelected() }, options = list(pageLength = 50, lengthMenu = DT_PAGE_MENU)) %>%
-      formatStyle(1:(ncol(datasetSelected()) - STAT_COL_COUNT), backgroundColor = styleInterval(COLOR_BREAKS, COLOR_VALUES))
-  )
-  output$sta <- DT::renderDataTable(DT::datatable({ datasetStats() }, options = list(pageLength = 5, lengthMenu = DT_PAGE_MENU)))
   output$selected_var <- renderText({
     current_data <- datasetInput()
     if (!("总长" %in% colnames(current_data))) validate(need(FALSE, "结果数据缺少「总长」列，请检查统计列配置"))
@@ -1341,7 +1340,11 @@ buildDesignplotServer <- function(input, output) {
     left <- input$f_l - planed
     paste("用地总长", input$f_l, "米,已规划", planed, "米,还剩", left, "米。", sep = "")
   })
-
+  output$simpleMydata <- DT::renderDataTable(
+    DT::datatable({ datasetSelected() }, options = list(pageLength = 50, lengthMenu = DT_PAGE_MENU)) %>%
+      formatStyle(1:(ncol(datasetSelected()) - STAT_COL_COUNT), backgroundColor = styleInterval(COLOR_BREAKS, COLOR_VALUES))
+  )
+  output$sta <- DT::renderDataTable(DT::datatable({ datasetStats() }, options = list(pageLength = 5, lengthMenu = DT_PAGE_MENU)))
   contents <- reactive({ req(input$file1); read.xlsx(input$file1$datapath, 1) })
   output$contents <- DT::renderDataTable(DT::datatable({ contents() }, options = list(pageLength = 5, lengthMenu = c(5, 10, 100, 1000, 10000))))
   output$mydf <- DT::renderDataTable(DT::datatable({ currentSowData() }, options = list(pageLength = 5, lengthMenu = c(5, 15, 30, 100, 1000))))
