@@ -45,7 +45,7 @@ buildDesignplotServer <- function(input, output) {
     special_df <- layout_df[layout_df$type == "特殊区域", , drop = FALSE]
     supplement_df <- layout_df[layout_df$type == "补种", , drop = FALSE]
 
-    ggplot() +
+    p <- ggplot() +
       geom_rect(data = exp_df,
                 mapping = aes(xmin = start_col - 0.5, xmax = end_col + 0.5,
                               ymin = start_row - 0.5, ymax = end_row + 0.5,
@@ -56,19 +56,29 @@ buildDesignplotServer <- function(input, output) {
                               ymin = start_row - 0.5, ymax = end_row + 0.5,
                               fill = name),
                 color = "white", linewidth = 0.5, alpha = 0.35) +
-      geom_rect(data = supplement_df,
-                mapping = aes(xmin = start_col - 0.5, xmax = end_col + 0.5,
-                              ymin = start_row - 0.5, ymax = end_row + 0.5,
-                              linetype = type),
-                fill = NA, color = "#111827", linewidth = 1.0) +
-      scale_fill_manual(values = fill_values, breaks = names(fill_values), name = "区域") +
-      scale_linetype_manual(values = c("补种" = "22"), breaks = "补种", name = "") +
+      scale_fill_manual(values = fill_values, breaks = names(fill_values), name = "区域")
+
+    if (nrow(supplement_df) > 0) {
+      p <- p +
+        geom_rect(data = supplement_df,
+                  mapping = aes(xmin = start_col - 0.5, xmax = end_col + 0.5,
+                                ymin = start_row - 0.5, ymax = end_row + 0.5,
+                                linetype = type),
+                  fill = NA, color = "#111827", linewidth = 1.0) +
+        scale_linetype_manual(values = c("补种" = "22"), breaks = "补种", name = "")
+    }
+
+    p +
       scale_x_continuous(name = "行", breaks = seq(0, metrics$total_cols, by = max(1, floor(metrics$total_cols / 10))),
                          limits = c(0, metrics$total_cols + 1)) +
       scale_y_continuous(name = "排", breaks = seq(0, metrics$max_row_id + 2, by = 2),
                          limits = c(0, metrics$max_row_id + 0.5), expand = c(0, 0)) +
       coord_fixed(ratio = metrics$aspect_ratio) +
-      guides(fill = guide_legend(ncol = 2, byrow = TRUE), linetype = guide_legend(order = 2)) +
+      (if (nrow(supplement_df) > 0) {
+        guides(fill = guide_legend(ncol = 2, byrow = TRUE), linetype = guide_legend(order = 2))
+      } else {
+        guides(fill = guide_legend(ncol = 2, byrow = TRUE))
+      }) +
       theme_minimal() +
       theme(
         panel.grid.major = element_line(color = "gray80", linewidth = 0.3),
@@ -115,13 +125,13 @@ buildDesignplotServer <- function(input, output) {
   buildPersistenceMeta <- reactive({
     list(
       source_param_file = NA_character_,
-      field_length = input$f_l,
+      field_length = NA_real_,
       field_layout = input$get_water_columns,
       bridge_layout = input$bridges,
       row_gap = input$w,
       group_rows = input$subg,
-      plant_start_pos = input$plant_start_pos,
-      plant_end_pos = input$plant_end_pos,
+      plant_start_pos = input$experimentPlantStartPos,
+      plant_end_pos = input$experimentPlantEndPos,
       design_from_left = as.logical(input$design_from_left),
       plant_from_left = as.logical(input$plant_from_left)
     )
@@ -202,7 +212,7 @@ buildDesignplotServer <- function(input, output) {
                      names_vec)
     choices <- setNames(names_vec, labels)
     pending <- pendingFieldModelSelection()
-    current <- input$field_model_select
+    current <- shiny::isolate(input$field_model_select)
     selected <- if (!is.null(pending) && nzchar(trimws(pending)) && pending %in% names_vec) {
       pending
     } else if (!is.null(current) && nzchar(trimws(current)) && current %in% names_vec) {
@@ -659,7 +669,7 @@ buildDesignplotServer <- function(input, output) {
     total_cols <- w_c()$total_cols
     total_rows <- nrow(datasetInput())
     tryCatch(
-      parsePlantingCoordinateRange(input$plant_start_pos, input$plant_end_pos, total_rows, total_cols),
+      parsePlantingCoordinateRange(input$experimentPlantStartPos, input$experimentPlantEndPos, total_rows, total_cols),
       error = function(e) validate(need(FALSE, paste0("种植位置设置错误：", e$message)))
     )
   })
@@ -717,7 +727,6 @@ buildDesignplotServer <- function(input, output) {
   # ===========================================================================
   applyModelToPlanningInputs <- function(model) {
     if (is.null(model)) return(invisible(NULL))
-    if (!is.na(model$field_len)) updateNumericInput(inputId = "f_l", value = as.numeric(model$field_len))
     if (!is.na(model$no_plant)) updateTextInput(inputId = "p_a", value = as.character(model$no_plant))
     if (!is.na(model$field_layout)) updateTextInput(inputId = "get_water_columns", value = as.character(model$field_layout))
     if (!is.na(model$strip_width)) updateTextInput(inputId = "bridges", value = as.character(model$strip_width))
@@ -736,8 +745,8 @@ buildDesignplotServer <- function(input, output) {
     if ((is.null(end_pos) || is.na(end_pos)) && !is.null(model$plant_end_col) && !is.na(model$plant_end_col)) {
       end_pos <- paste0(",", as.integer(model$plant_end_col))
     }
-    if (!is.null(start_pos) && !is.na(start_pos)) updateTextInput(inputId = "plant_start_pos", value = as.character(start_pos))
-    if (!is.null(end_pos) && !is.na(end_pos)) updateTextInput(inputId = "plant_end_pos", value = as.character(end_pos))
+    if (!is.null(start_pos) && !is.na(start_pos)) updateTextInput(inputId = "experimentPlantStartPos", value = as.character(start_pos))
+    if (!is.null(end_pos) && !is.na(end_pos)) updateTextInput(inputId = "experimentPlantEndPos", value = as.character(end_pos))
     updateRadioButtons(inputId = "design_from_left", selected = ifelse(!is.na(model$plan_left), as.logical(model$plan_left), TRUE))
     updateRadioButtons(inputId = "plant_from_left", selected = ifelse(!is.na(model$plant_left), as.logical(model$plant_left), TRUE))
     invisible(NULL)
@@ -745,11 +754,11 @@ buildDesignplotServer <- function(input, output) {
 
   currentFieldModelData <- reactive({
     list(
-      field_len = input$f_l, no_plant = input$p_a,
+      field_len = NA_real_, no_plant = input$p_a,
       field_layout = input$get_water_columns, strip_width = input$bridges,
       protect_strip = input$protected_blocks, cross_path_width = input$ww,
       row_gap = input$w, group_rows = input$subg,
-      plant_start_pos = input$plant_start_pos, plant_end_pos = input$plant_end_pos,
+      plant_start_pos = input$experimentPlantStartPos, plant_end_pos = input$experimentPlantEndPos,
       plan_left = as.logical(input$design_from_left),
       plant_left = as.logical(input$plant_from_left)
     )
@@ -1041,15 +1050,12 @@ buildDesignplotServer <- function(input, output) {
     exp_count <- if (is.data.frame(exp_df) && nrow(exp_df) > 0) nrow(exp_df) else 0L
     rec_count <- if (is.data.frame(rec_df) && nrow(rec_df) > 0) nrow(rec_df) else 0L
     selected_exp <- trimws(input$sqliteFilterExperimentId)
-    rec_for_rows <- rec_df
-    if (nzchar(selected_exp) && is.data.frame(rec_df) && nrow(rec_df) > 0 && "experiment_id" %in% names(rec_df)) {
-      rec_for_rows <- rec_df[trimws(as.character(rec_df$experiment_id)) == selected_exp, , drop = FALSE]
-    }
-    row_sum_col <- if (is.data.frame(rec_for_rows) && nrow(rec_for_rows) > 0) {
-      if ("new_rows" %in% names(rec_for_rows)) "new_rows" else if ("rows" %in% names(rec_for_rows)) "rows" else NA_character_
+    row_sum_col <- if (is.data.frame(rec_df) && nrow(rec_df) > 0) {
+      if ("new_rows" %in% names(rec_df)) "new_rows" else if ("rows" %in% names(rec_df)) "rows" else NA_character_
     } else NA_character_
+    # 与「当前筛选」无关：累计全部试验在记录表中的行数
     total_rows_sum <- if (!is.na(row_sum_col)) {
-      sum(suppressWarnings(as.numeric(rec_for_rows[[row_sum_col]])), na.rm = TRUE)
+      sum(suppressWarnings(as.numeric(rec_df[[row_sum_col]])), na.rm = TRUE)
     } else {
       0
     }
@@ -1098,7 +1104,7 @@ buildDesignplotServer <- function(input, output) {
         column(2, tags$div(style = "text-align:center;",
           tags$span(as.character(s$total_rows_sum), style = "font-size:28px;font-weight:700;color:#3b82f6;"),
           tags$br(),
-          tags$span("总行数", style = "font-size:12px;color:#6b7280;")
+          tags$span("总行数（全部试验）", style = "font-size:12px;color:#6b7280;")
         )),
         column(3, tags$div(style = "text-align:center;",
           tags$span(s$selected_exp, style = "font-size:14px;font-weight:600;color:#1f2937;"),
@@ -1529,8 +1535,7 @@ buildDesignplotServer <- function(input, output) {
     current_data <- datasetInput()
     if (!("总长" %in% colnames(current_data))) validate(need(FALSE, "结果数据缺少「总长」列，请检查统计列配置"))
     planed <- current_data[1, "总长"]
-    left <- input$f_l - planed
-    paste("用地总长", input$f_l, "米,已规划", planed, "米,还剩", left, "米。", sep = "")
+    paste("已规划总长", planed, "米。", sep = "")
   })
   output$simpleMydata <- DT::renderDataTable(
     DT::datatable({ datasetSelected() }, options = list(pageLength = 50, lengthMenu = DT_PAGE_MENU)) %>%

@@ -23,7 +23,6 @@ buildDesignplotUI <- function(){
                             tags$div(
                               style = "background:#ffffff;border:1px solid #dbe4ee;border-radius:10px;padding:10px 12px;margin-bottom:10px;",
                               tags$div("基础参数", style = "font-size:15px;font-weight:600;color:#1f2937;margin-bottom:6px;"),
-                              numericInput("f_l", h5("规划地长(m)"), value = NA),
                               textInput("get_water_columns", h5("田间纵向布局"), value="", placeholder = "w/8/w"),
                               tags$p("w=水沟；r=纵向观察道；p=保护行；斜杠间数字=水沟间行数", style = "margin-top:-6px;color:#6b7280;font-size:12px;line-height:1.6;"),
                               textInput("bridges", h5("条带宽度设置"), value="", placeholder = "10,6/3,10"),
@@ -35,12 +34,6 @@ buildDesignplotUI <- function(){
                               numericInput("ww", h5("横向观察道宽(m)"), value = NA, min = 0),
                               numericInput("w", h5("材料间隔(m)"), value = NA, min = 0),
                               numericInput("subg", h5("组内不隔断行数"), value = NA, min = 1)
-                            ),
-                            tags$div(
-                              style = "background:#ffffff;border:1px solid #dbe4ee;border-radius:10px;padding:10px 12px;margin-bottom:10px;",
-                              tags$div("种植位置", style = "font-size:15px;font-weight:600;color:#1f2937;margin-bottom:6px;"),
-                              textInput("plant_start_pos", h5("起始位置（行,列）"), value = "", placeholder = "1,1 / 1, / ,3"),
-                              textInput("plant_end_pos", h5("终止位置（行,列；留空=最后）"), value = "", placeholder = "留空默认到最后")
                             ),
                             tags$details(
                               tags$summary("高级参数"),
