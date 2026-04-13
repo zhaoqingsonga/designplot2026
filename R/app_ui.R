@@ -127,7 +127,10 @@ buildDesignplotUI <- function(){
                               tags$div(style = "height:8px;"),
                               checkboxInput("allowExperimentReplant", "允许覆盖重种（默认关闭）", value = FALSE),
                               tags$p("默认会阻止同一 experiment_id 在同一地块重复种植，避免误操作。", style = "margin:0 0 8px 0;color:#6b7280;font-size:12px;line-height:1.6;"),
-                              uiOutput("runExperimentPlantingUi")
+                              uiOutput("runExperimentPlantingUi"),
+                              tags$div(style = "height:8px;"),
+                              tags$p("最近两次「执行试验种植」可在下方撤销（仅本会话有效，刷新页面后记录清空）。", style = "margin:0 0 6px 0;color:#6b7280;font-size:12px;line-height:1.55;"),
+                              uiOutput("undoExperimentPlantingUi")
                             )
                           )
                         ),

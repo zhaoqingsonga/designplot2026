@@ -57,14 +57,19 @@ extractPlantingTargets<-function(field, start_row=1, start_col=1, end_row=NULL, 
     ))
   }
 
-  result<-data.frame(
-    seq_no=as.integer(field[cbind(positions[,1], positions[,2] + start_col - 1)]),
-    field_row_index=positions[,1],
-    field_row=suppressWarnings(as.numeric(field[positions[,1], ncol(field)-STAT_COL_OFFSET_ROWNO])),
-    field_col=positions[,2] + start_col - 1,
-    stringsAsFactors=FALSE
+  cell_vals <- field[cbind(positions[, 1], positions[, 2] + start_col - 1)]
+  seq_vals <- suppressWarnings(as.numeric(cell_vals))
+  seq_no <- as.integer(seq_vals)
+  result <- data.frame(
+    seq_no = seq_no,
+    field_row_index = positions[, 1],
+    field_row = suppressWarnings(as.numeric(field[positions[, 1], ncol(field) - STAT_COL_OFFSET_ROWNO])),
+    field_col = positions[, 2] + start_col - 1,
+    stringsAsFactors = FALSE
   )
-  result<-result[result$field_row >= start_row & result$field_row <= end_row, , drop=FALSE]
+  ok_seq <- !is.na(result$seq_no) & result$seq_no > 0L
+  result <- result[ok_seq, , drop = FALSE]
+  result <- result[result$field_row >= start_row & result$field_row <= end_row, , drop = FALSE]
   if(nrow(result)==0){
     return(data.frame(
       seq_no=integer(),

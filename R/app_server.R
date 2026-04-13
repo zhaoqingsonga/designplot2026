@@ -115,6 +115,8 @@ buildDesignplotServer <- function(input, output) {
   fieldLayoutCache <- reactiveVal(list(key = NA_character_, data = NULL))
   pendingDeleteExpRowId <- reactiveVal(NULL)
   isPlantingInProgress <- reactiveVal(FALSE)
+  # 执行种植撤销：内存中保留最近 2 次操作前的快照（刷新页面后清空）
+  plantingUndoStack <- reactiveVal(list())
   # 各 Tab 共用的当前种植表（*.plant 表名）；四个下拉框由此同步
   activePlantTableName <- reactiveVal(NA_character_)
   unifiedPlantSelectBusy <- reactiveVal(FALSE)
@@ -1189,7 +1191,7 @@ buildDesignplotServer <- function(input, output) {
     }
     if (isTRUE(input$allowExperimentReplant)) {
       return(list(level = "warn", runnable = TRUE,
-                  message = paste0("⚠️ 覆盖模式：试验=", exp_id, "；地块=", table_name, "；行 ", start_row, "-", end_row, "；列 ", start_col, "-", end_col, "。执行将覆盖历史结果。")))
+                  message = paste0("⚠️ 覆盖模式：试验=", exp_id, "；地块=", table_name, "；行 ", start_row, "-", end_row, "；列 ", start_col, "-", end_col, "。将执行重复种植。")))
     }
     list(level = "ok", runnable = TRUE,
          message = paste0("✅ 可执行：试验=", exp_id, "；地块=", table_name, "；行 ", start_row, "-", end_row, "；列 ", start_col, "-", end_col))
@@ -1241,6 +1243,15 @@ buildDesignplotServer <- function(input, output) {
     if (!isTRUE(capacity_status$ok)) {
       stop(paste0("种植容量不足：可种 ", capacity_status$capacity, " 行；需种 ", capacity_status$demand, " 行；超出 ", capacity_status$overflow, " 行。请缩小种子量或扩大种植范围。"))
     }
+    stable_plan_id <- autoPersistPlanId()
+    ck <- capturePlantingUndoCheckpoint(
+      plant_table_name = selected_plant_table,
+      experiment_id = exp_id,
+      plan_id = stable_plan_id,
+      field_name = sub("\\.plant$", "", selected_plant_table),
+      db_path = sqlite_db_path
+    )
+
     planted <- plant(base_matrix, experimentSeedList(),
                      start_row = parsed$start_row, start_col = parsed$start_col,
                      end_row = parsed$end_row, end_col = parsed$end_col)
@@ -1261,8 +1272,6 @@ buildDesignplotServer <- function(input, output) {
     } else {
       currentExperimentName()
     }
-    # Use experiment-aware auto plan_id to avoid creating duplicate plans for the same experiment
-    stable_plan_id <- autoPersistPlanId()
     plan_result <- savePlanToSqlite(plan_matrix = base_matrix, experiment_name = exp_name, db_path = sqlite_db_path, plan_id = stable_plan_id, metadata = buildPersistenceMeta())
     latest_plan_id(plan_result$plan_id)
     saveAssignmentsToSqlite(plan_id = plan_result$plan_id, planted_matrix = planted, plan_matrix = base_matrix, experiment_name = exp_name, db_path = sqlite_db_path)
@@ -1270,6 +1279,10 @@ buildDesignplotServer <- function(input, output) {
                            plan_id = plan_result$plan_id, db_path = sqlite_db_path,
                            overwrite = isTRUE(overwrite_mode) || isTRUE(input$allowExperimentReplant))
     refreshAllSqlite()
+    stk <- plantingUndoStack()
+    stk <- c(stk, list(ck))
+    if (length(stk) > 2L) stk <- utils::tail(stk, 2)
+    plantingUndoStack(stk)
     if (isTRUE(overwrite_mode)) {
       showNotification(paste0("试验种植完成（覆盖重种），结果已写入：", selected_plant_table, "；", sow_result$table_name, "；plan_id: ", plan_result$plan_id), type = "message")
     } else {
@@ -1282,7 +1295,7 @@ buildDesignplotServer <- function(input, output) {
       if (isTRUE(input$allowExperimentReplant)) {
         showModal(modalDialog(
           title = "确认覆盖重种",
-          tags$p("你已启用「允许覆盖重种」。本次执行将覆盖该试验在当前地块的历史结果。", style = "margin:0;color:#b91c1c;"),
+          tags$p("你已启用「允许覆盖重种」。", style = "margin:0;color:#b91c1c;"),
           footer = tagList(modalButton("取消"), actionButton("confirmRunExperimentPlanting", "确认执行", class = "btn-danger")),
           easyClose = TRUE
         ))
@@ -1306,6 +1319,44 @@ buildDesignplotServer <- function(input, output) {
       showNotification(paste0("试验种植失败: ", e$message), type = "error")
     }, finally = {
       isPlantingInProgress(FALSE)
+    })
+  })
+
+  output$undoExperimentPlantingUi <- renderUI({
+    n <- length(plantingUndoStack())
+    lbl <- if (n > 0L) {
+      sprintf("撤销上一步种植（还可 %d 次）", n)
+    } else {
+      "撤销上一步种植（当前无可撤）"
+    }
+    cls <- if (n > 0L) "btn-warning" else "btn-default"
+    actionButton("undoExperimentPlanting", lbl, class = cls, width = "100%")
+  })
+
+  observeEvent(input$undoExperimentPlanting, {
+    stk <- plantingUndoStack()
+    if (length(stk) == 0L) {
+      showNotification("没有可撤销的种植操作（仅保留最近两次，且刷新页面后会清空）", type = "warning")
+      return(invisible(NULL))
+    }
+    ck <- stk[[length(stk)]]
+    tryCatch({
+      restorePlantingUndoCheckpoint(ck, sqlite_db_path)
+      plantingUndoStack(stk[-length(stk)])
+      experimentPlantedState(list(table_name = ck$plant_table_name, matrix = ck$plant_matrix))
+      if (is.data.frame(ck$plan_run) && nrow(ck$plan_run) > 0L && nzchar(trimws(as.character(ck$plan_id)))) {
+        latest_plan_id(as.character(ck$plan_id[1]))
+      } else {
+        latest_plan_id(NULL)
+      }
+      eid_undo <- trimws(as.character(ck$experiment_id))
+      if (nzchar(eid_undo)) pendingSqliteExperimentSelection(eid_undo)
+      plantTableTrigger(plantTableTrigger() + 1L)
+      refreshAllSqlite()
+      setActivePlantTable(ck$plant_table_name)
+      showNotification("已撤销上一步「执行试验种植」", type = "message")
+    }, error = function(e) {
+      showNotification(paste0("撤销失败: ", e$message), type = "error")
     })
   })
 

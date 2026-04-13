@@ -994,3 +994,153 @@ persistPlanAndAssignments <- function(plan_matrix, planted_matrix = NULL, experi
 `%||%` <- function(x, y) {
   if (is.null(x)) y else x
 }
+
+# ---- 执行种植：撤销栈快照（内存中保留最近 N 步，由 Shiny 侧维护列表长度）----
+capturePlantingUndoCheckpoint <- function(plant_table_name, experiment_id, plan_id, field_name,
+                                          db_path = defaultSqlitePath()) {
+  plant_table_name <- trimws(as.character(plant_table_name))
+  experiment_id <- trimws(as.character(experiment_id))
+  plan_id <- trimws(as.character(plan_id))
+  field_name <- trimws(as.character(field_name))
+  if (!nzchar(plant_table_name)) stop("plant_table_name 不能为空")
+  if (!nzchar(experiment_id)) stop("experiment_id 不能为空")
+  if (!nzchar(plan_id)) stop("plan_id 不能为空")
+  if (!nzchar(field_name)) stop("field_name 不能为空")
+
+  plant_matrix <- tryCatch(
+    readPlantTable(plant_table_name, db_path),
+    error = function(e) stop(paste0("读取种植表失败: ", e$message))
+  )
+  sow_name <- createSowTableName(field_name)
+  sow_df <- readSowTable(sow_name, db_path)
+  if (!is.data.frame(sow_df)) sow_df <- data.frame()
+
+  con <- connectDesignplotDb(db_path)
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
+  initDesignplotDb(con)
+
+  plan_run <- tryCatch(
+    DBI::dbGetQuery(con, "SELECT * FROM plan_runs WHERE plan_id = ?", params = list(plan_id)),
+    error = function(e) data.frame()
+  )
+  if (!is.data.frame(plan_run)) plan_run <- data.frame()
+  plan_slots <- tryCatch(
+    DBI::dbGetQuery(con, "SELECT * FROM plan_slots WHERE plan_id = ? ORDER BY slot_id", params = list(plan_id)),
+    error = function(e) data.frame()
+  )
+  if (!is.data.frame(plan_slots)) plan_slots <- data.frame()
+  plant_assignments <- tryCatch(
+    DBI::dbGetQuery(con, "SELECT * FROM plant_assignments WHERE plan_id = ? ORDER BY assignment_id", params = list(plan_id)),
+    error = function(e) data.frame()
+  )
+  if (!is.data.frame(plant_assignments)) plant_assignments <- data.frame()
+
+  epr <- tryCatch(
+    DBI::dbGetQuery(con,
+      "SELECT * FROM experiment_plant_runs WHERE experiment_id = ? AND plant_table_name = ?",
+      params = list(experiment_id, plant_table_name)),
+    error = function(e) data.frame()
+  )
+  if (!is.data.frame(epr)) epr <- data.frame()
+
+  list(
+    version = 1L,
+    plant_table_name = plant_table_name,
+    field_name = field_name,
+    sow_table_name = sow_name,
+    experiment_id = experiment_id,
+    plan_id = plan_id,
+    plant_matrix = plant_matrix,
+    sow_df = sow_df,
+    plan_run = plan_run,
+    plan_slots = plan_slots,
+    plant_assignments = plant_assignments,
+    experiment_plant_run = epr
+  )
+}
+
+restorePlantingUndoCheckpoint <- function(checkpoint, db_path = defaultSqlitePath()) {
+  if (!is.list(checkpoint) || !identical(checkpoint$version, 1L)) stop("无效的快照")
+  plant_table_name <- trimws(as.character(checkpoint$plant_table_name))
+  field_name <- trimws(as.character(checkpoint$field_name))
+  plan_id <- trimws(as.character(checkpoint$plan_id))
+  experiment_id <- trimws(as.character(checkpoint$experiment_id))
+
+  savePlantTable(field_name, checkpoint$plant_matrix, db_path = db_path)
+  sow_df <- checkpoint$sow_df
+  if (!is.data.frame(sow_df)) sow_df <- data.frame()
+  saveSowTable(field_name, sow_df, db_path = db_path)
+
+  con <- connectDesignplotDb(db_path)
+  on.exit(DBI::dbDisconnect(con), add = TRUE)
+  initDesignplotDb(con)
+
+  DBI::dbWithTransaction(con, {
+    DBI::dbExecute(con, "DELETE FROM plant_assignments WHERE plan_id = ?", params = list(plan_id))
+    DBI::dbExecute(con, "DELETE FROM plan_slots WHERE plan_id = ?", params = list(plan_id))
+    DBI::dbExecute(con, "DELETE FROM plan_runs WHERE plan_id = ?", params = list(plan_id))
+
+    pr <- checkpoint$plan_run
+    if (is.data.frame(pr) && nrow(pr) > 0) {
+      DBI::dbExecute(con,
+        paste0(
+          "INSERT INTO plan_runs(plan_id, experiment_name, source_param_file, field_length, field_layout, ",
+          "bridge_layout, row_gap, group_rows, design_from_left, plant_from_left, created_at) ",
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        ),
+        params = list(
+          as.character(pr$plan_id[1]),
+          as.character(pr$experiment_name[1]),
+          if ("source_param_file" %in% names(pr)) as.character(pr$source_param_file[1]) else NA_character_,
+          suppressWarnings(as.numeric(if ("field_length" %in% names(pr)) pr$field_length[1] else NA_real_)),
+          if ("field_layout" %in% names(pr)) as.character(pr$field_layout[1]) else NA_character_,
+          if ("bridge_layout" %in% names(pr)) as.character(pr$bridge_layout[1]) else NA_character_,
+          suppressWarnings(as.numeric(if ("row_gap" %in% names(pr)) pr$row_gap[1] else NA_real_)),
+          suppressWarnings(as.integer(if ("group_rows" %in% names(pr)) pr$group_rows[1] else NA_integer_)),
+          suppressWarnings(as.integer(if ("design_from_left" %in% names(pr)) pr$design_from_left[1] else NA_integer_)),
+          suppressWarnings(as.integer(if ("plant_from_left" %in% names(pr)) pr$plant_from_left[1] else NA_integer_)),
+          as.character(pr$created_at[1])
+        ))
+    }
+
+    ps <- checkpoint$plan_slots
+    if (is.data.frame(ps) && nrow(ps) > 0) {
+      slot_cols <- c("plan_id", "seq_no", "field_row_index", "field_row_no", "field_col_no", "row_length", "total_length", "interval_width", "created_at")
+      slot_cols <- intersect(slot_cols, names(ps))
+      if (length(slot_cols) > 0) {
+        ps_out <- ps[, slot_cols, drop = FALSE]
+        DBI::dbWriteTable(con, "plan_slots", ps_out, append = TRUE)
+      }
+    }
+
+    pa <- checkpoint$plant_assignments
+    if (is.data.frame(pa) && nrow(pa) > 0) {
+      as_cols <- c("plan_id", "seq_no", "experiment_name", "material_name", "material_subrow_no", "field_row_no", "field_col_no", "created_at")
+      as_cols <- intersect(as_cols, names(pa))
+      if (length(as_cols) > 0) {
+        pa_out <- pa[, as_cols, drop = FALSE]
+        DBI::dbWriteTable(con, "plant_assignments", pa_out, append = TRUE)
+      }
+    }
+
+    DBI::dbExecute(con,
+      "DELETE FROM experiment_plant_runs WHERE experiment_id = ? AND plant_table_name = ?",
+      params = list(experiment_id, plant_table_name))
+
+    epr <- checkpoint$experiment_plant_run
+    if (is.data.frame(epr) && nrow(epr) > 0) {
+      DBI::dbExecute(con,
+        "INSERT INTO experiment_plant_runs(experiment_id, plant_table_name, sow_table_name, plan_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+        params = list(
+          as.character(epr$experiment_id[1]),
+          as.character(epr$plant_table_name[1]),
+          if ("sow_table_name" %in% names(epr)) as.character(epr$sow_table_name[1]) else NA_character_,
+          if ("plan_id" %in% names(epr)) as.character(epr$plan_id[1]) else NA_character_,
+          as.character(epr$created_at[1]),
+          as.character(epr$updated_at[1])
+        ))
+    }
+  })
+
+  invisible(TRUE)
+}
