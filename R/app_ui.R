@@ -7,7 +7,7 @@ buildDesignplotUI <- function(){
                             tags$div(
                               style = "background:#f8fafc;border:1px solid #dbe4ee;border-radius:10px;padding:12px 12px 8px 12px;margin-bottom:10px;",
                               tags$div("地块管理", style = "font-size:16px;font-weight:600;color:#1f2937;margin-bottom:8px;"),
-不知                              selectInput("field_model_select", "当前参数", choices = c("常规地块1" = "常规地块1"), selected = "常规地块1", width = "100%"),
+                              selectInput("field_model_select", "当前参数", choices = c("常规地块1" = "常规地块1"), selected = "常规地块1", width = "100%"),
                               fluidRow(
                                 column(4, actionButton("saveFieldModel", "保存参数", class = "btn-primary", width = "100%")),
                                 column(4, actionButton("addFieldModel", "增加参数", class = "btn-success", width = "100%")),
@@ -87,9 +87,13 @@ buildDesignplotUI <- function(){
                ),
                tabPanel("种植试验",
                         uiOutput("experimentStatusSummaryUi"),
+                        tags$div(
+                          style = "background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px 14px;margin-bottom:14px;color:#1e3a5f;font-size:13px;line-height:1.55;",
+                          tags$strong("建议顺序："),
+                          "导入试验 → 选种植地块 → 选试验与种植范围 → 执行种植 →（可选）区域补种"
+                        ),
                         fluidRow(
-                          column(4,
-                            # Step 1: 导入试验（蓝左边框）
+                          column(6,
                             tags$div(
                               style = "background:#ffffff;border:1px solid #dbe4ee;border-left:4px solid #3b82f6;border-radius:10px;padding:12px;margin-bottom:12px;",
                               fluidRow(
@@ -101,60 +105,69 @@ buildDesignplotUI <- function(){
                                         accept = c(".xlsx", ".xls", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")),
                               textInput("experimentImportName", "试验名称（默认=上传文件名）", value = ""),
                               actionButton("importExperimentPlanting", "导入试验", class = "btn-primary", width = "100%")
-                            ),
-                            # Step 2: 种植配置（白+阴影卡片）
+                            )
+                          ),
+                          column(6,
                             tags$div(
                               style = "background:#ffffff;border:1px solid #dbe4ee;border-radius:10px;padding:12px;margin-bottom:12px;box-shadow:0 2px 8px rgba(15,23,42,0.06);",
                               fluidRow(
                                 column(1, tags$span("2", style = "background:#10b981;color:#fff;border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;")),
-                                column(11, tags$span("种植配置", style = "font-size:15px;font-weight:600;color:#1f2937;margin-left:6px;"))
+                                column(11, tags$span("种植配置（先选地块，再选试验与范围）", style = "font-size:15px;font-weight:600;color:#1f2937;margin-left:6px;"))
                               ),
                               tags$div(style = "height:4px;"),
                               selectInput("experimentPlantTableSelect", "选择种植地块", choices = c("暂无地块" = ""), selected = ""),
+                              selectInput("sqliteFilterExperimentId", "选择试验", choices = c("全部试验" = ""), selected = "", width = "100%"),
                               textInput("experimentPlantStartPos", "种植起始位置（行,列）", value = "1,1", placeholder = "示例：1,1 / 1, / ,3 / 1"),
                               textInput("experimentPlantEndPos", "种植终止位置（行,列；留空=最后）", value = "", placeholder = "示例：10,8 / 10, / ,8 / 10"),
                               uiOutput("experimentPlantSummaryUi")
-                            ),
-                            # Step 4: 区域补种（浅黄左边框）
-                            tags$div(
-                              style = "background:#fffbeb;border:1px solid #fcd34d;border-left:4px solid #f59e0b;border-radius:10px;padding:12px;margin-bottom:12px;",
-                              fluidRow(
-                                column(1, tags$span("4", style = "background:#f59e0b;color:#fff;border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;")),
-                                column(11, tags$span("区域补种", style = "font-size:15px;font-weight:600;color:#1f2937;margin-left:6px;"))
-                              ),
-                              tags$div(style = "height:4px;"),
-                              textInput("experimentFillMaterial", "区域补种材料（仅填未种位）", value = "", placeholder = "示例：补种材料A"),
-                              uiOutput("experimentFillSummaryUi"),
-                              actionButton("runExperimentFillUnplanted", "执行区域补种（仅未种）", class = "btn-warning", width = "100%")
                             )
-                          ),
-                          column(8,
-                            # 执行种植卡（蓝左边框）
+                          )
+                        ),
+                        fluidRow(
+                          column(12,
                             tags$div(
-                              style = "background:#ffffff;border:1px solid #dbe4ee;border-left:4px solid #3b82f6;border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 2px 8px rgba(15,23,42,0.06);",
+                              style = "background:#ffffff;border:1px solid #dbe4ee;border-left:4px solid #2563eb;border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 2px 8px rgba(15,23,42,0.06);",
                               fluidRow(
-                                column(1, tags$span("3", style = "background:#3b82f6;color:#fff;border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;")),
+                                column(1, tags$span("3", style = "background:#2563eb;color:#fff;border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;")),
                                 column(11, tags$span("执行种植", style = "font-size:16px;font-weight:600;color:#1f2937;margin-left:6px;"))
                               ),
                               tags$div(style = "height:8px;"),
                               checkboxInput("allowExperimentReplant", "允许覆盖重种（默认关闭）", value = FALSE),
                               tags$p("默认会阻止同一 experiment_id 在同一地块重复种植，避免误操作。", style = "margin:0 0 8px 0;color:#6b7280;font-size:12px;line-height:1.6;"),
                               uiOutput("runExperimentPlantingUi")
-                            ),
-                            # 试验名称表
+                            )
+                          )
+                        ),
+                        fluidRow(
+                          column(12,
+                            tags$div(
+                              style = "background:#fffbeb;border:1px solid #fcd34d;border-left:4px solid #f59e0b;border-radius:10px;padding:12px;margin-bottom:12px;",
+                              fluidRow(
+                                column(1, tags$span("4", style = "background:#f59e0b;color:#fff;border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;")),
+                                column(11, tags$span("区域补种（可选）", style = "font-size:15px;font-weight:600;color:#1f2937;margin-left:6px;"))
+                              ),
+                              tags$div(style = "height:4px;"),
+                              textInput("experimentFillMaterial", "区域补种材料（仅填未种位）", value = "", placeholder = "示例：补种材料A"),
+                              uiOutput("experimentFillSummaryUi"),
+                              actionButton("runExperimentFillUnplanted", "执行区域补种（仅未种）", class = "btn-warning", width = "100%")
+                            )
+                          )
+                        ),
+                        fluidRow(
+                          column(6,
                             tags$div(
                               style = "background:#ffffff;border:1px solid #dbe4ee;border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 2px 8px rgba(15,23,42,0.06);",
                               fluidRow(
                                 column(12, tags$span("试验名称表", style = "font-size:16px;font-weight:600;color:#1f2937;"))
                               ),
                               tags$div(style = "height:4px;"),
-                              selectInput("sqliteFilterExperimentId", "选择试验", choices = c("全部试验" = ""), selected = "", width = "100%"),
                               DT::dataTableOutput("sqliteExperiments"),
                               downloadButton("downloadExperimentsCsv", "下载试验名称表（csv）")
-                            ),
-                            # 试验记录表
+                            )
+                          ),
+                          column(6,
                             tags$div(
-                              style = "background:#ffffff;border:1px solid #dbe4ee;border-radius:12px;padding:14px;box-shadow:0 2px 8px rgba(15,23,42,0.06);",
+                              style = "background:#ffffff;border:1px solid #dbe4ee;border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 2px 8px rgba(15,23,42,0.06);",
                               h4("试验记录表", style = "margin-top:0;margin-bottom:10px;"),
                               DT::dataTableOutput("sqliteExperimentRecords"),
                               downloadButton("downloadExperimentRecordsCsv", "下载试验记录表（csv）")

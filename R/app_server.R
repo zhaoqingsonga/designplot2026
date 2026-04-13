@@ -97,6 +97,7 @@ buildDesignplotServer <- function(input, output) {
   fieldModelTrigger <- reactiveVal(0L)
 
   pendingFieldModelSelection <- reactiveVal(NULL)
+  pendingSqliteExperimentSelection <- reactiveVal(NULL)
   fieldModelInitialized <- reactiveVal(FALSE)
   planningInputsHydrated <- reactiveVal(FALSE)
   autoPersistLastPlanSig <- reactiveVal(NA_character_)
@@ -251,21 +252,48 @@ buildDesignplotServer <- function(input, output) {
   observe({
     exp_df <- experimentOptions()
     if (!is.data.frame(exp_df) || nrow(exp_df) == 0) {
+      pendingSqliteExperimentSelection(NULL)
       updateSelectInput(session = getDefaultReactiveDomain(), inputId = "sqliteFilterExperimentId", choices = c("全部试验" = ""), selected = "")
       return()
     }
     planted_ids <- getPlantedExperimentIds(sqlite_db_path)
     planted_ids <- as.character(planted_ids)
-    labels <- paste0(
-      as.character(exp_df$experiment_name),
-      " (", as.character(exp_df$experiment_id), ") ",
-      ifelse(as.character(exp_df$experiment_id) %in% planted_ids, "✓已种", "○未种")
-    )
-    choices <- stats::setNames(as.character(exp_df$experiment_id), labels)
+    nm <- trimws(as.character(exp_df$experiment_name))
+    eid <- trimws(as.character(exp_df$experiment_id))
+    stat_lbl <- ifelse(eid %in% planted_ids, "✓已种", "○未种")
+    name_dup <- stats::ave(seq_len(nrow(exp_df)), nm, FUN = length)
+    name_dup <- as.integer(name_dup) > 1L
+    # 下拉框展示以试验名为准；仅当名称重复时附带 ID 以免混淆
+    labels <- paste0(nm, ifelse(name_dup, paste0(" [", eid, "]"), ""), " ", stat_lbl)
+    choices <- stats::setNames(eid, labels)
     filter_choices <- c("全部试验" = "", choices)
-    current_filter <- trimws(input$sqliteFilterExperimentId)
-    selected_filter <- if (nzchar(current_filter) && current_filter %in% unname(filter_choices)) current_filter else ""
+    choice_ids <- unname(filter_choices)
+    pending <- pendingSqliteExperimentSelection()
+    pending_id <- if (!is.null(pending)) trimws(as.character(pending)) else ""
+    # 勿直接依赖 input$sqliteFilterExperimentId：否则 updateSelectInput 后立刻清空 pending 会再跑一次本 observe，
+    # 此时客户端尚未回传新值，input 仍为旧值，会把选中项错误重置为「全部试验」。
+    current_filter <- trimws(shiny::isolate(input$sqliteFilterExperimentId))
+    selected_filter <- if (nzchar(pending_id) && pending_id %in% choice_ids) {
+      pending_id
+    } else if (nzchar(current_filter) && current_filter %in% choice_ids) {
+      current_filter
+    } else {
+      ""
+    }
     updateSelectInput(session = getDefaultReactiveDomain(), inputId = "sqliteFilterExperimentId", choices = filter_choices, selected = selected_filter)
+  })
+
+  # pending 仅在客户端 input 已与目标 ID 一致后再清除，避免与上方 observe 形成「抢跑」重置下拉框
+  observe({
+    p <- pendingSqliteExperimentSelection()
+    if (is.null(p) || !nzchar(trimws(as.character(p)))) {
+      return(invisible(NULL))
+    }
+    target <- trimws(as.character(p))
+    cur <- trimws(as.character(input$sqliteFilterExperimentId))
+    if (nzchar(cur) && identical(cur, target)) {
+      pendingSqliteExperimentSelection(NULL)
+    }
   })
 
   # ===========================================================================
@@ -497,11 +525,8 @@ buildDesignplotServer <- function(input, output) {
       } else data.frame()
       if (nrow(exp_rows) < 1 || nrow(rec_rows) < 1) stop("导入校验失败：未找到对应试验或记录")
 
-      filter_choices <- c("全部试验" = "", stats::setNames(
-        as.character(experiments_all$experiment_id),
-        paste0(as.character(experiments_all$experiment_name), " (", as.character(experiments_all$experiment_id), ")")
-      ))
-      updateSelectInput(session = getDefaultReactiveDomain(), inputId = "sqliteFilterExperimentId", choices = filter_choices, selected = imported_id)
+      # 先记下待选试验，再刷新；避免 refresh 触发的 observe 在 input 尚未更新时把选中项重置为「全部」
+      pendingSqliteExperimentSelection(imported_id)
       refreshAllSqlite()
       showNotification(paste0("试验导入成功：ID=", imported_id, "，记录数=", nrow(rec_rows), "，汇总行数=", as.numeric(exp_rows$total_rows[1])), type = "message")
     }, error = function(e) {
@@ -941,15 +966,41 @@ buildDesignplotServer <- function(input, output) {
     exp_count <- if (is.data.frame(exp_df) && nrow(exp_df) > 0) nrow(exp_df) else 0L
     rec_count <- if (is.data.frame(rec_df) && nrow(rec_df) > 0) nrow(rec_df) else 0L
     selected_exp <- trimws(input$sqliteFilterExperimentId)
-    selected_exp_display <- if (nzchar(selected_exp)) selected_exp else "全部"
+    rec_for_rows <- rec_df
+    if (nzchar(selected_exp) && is.data.frame(rec_df) && nrow(rec_df) > 0 && "experiment_id" %in% names(rec_df)) {
+      rec_for_rows <- rec_df[trimws(as.character(rec_df$experiment_id)) == selected_exp, , drop = FALSE]
+    }
+    row_sum_col <- if (is.data.frame(rec_for_rows) && nrow(rec_for_rows) > 0) {
+      if ("new_rows" %in% names(rec_for_rows)) "new_rows" else if ("rows" %in% names(rec_for_rows)) "rows" else NA_character_
+    } else NA_character_
+    total_rows_sum <- if (!is.na(row_sum_col)) {
+      sum(suppressWarnings(as.numeric(rec_for_rows[[row_sum_col]])), na.rm = TRUE)
+    } else {
+      0
+    }
+    selected_exp_display <- if (!nzchar(selected_exp)) {
+      "全部"
+    } else if (is.data.frame(exp_df) && nrow(exp_df) > 0 &&
+               "experiment_id" %in% names(exp_df) && "experiment_name" %in% names(exp_df)) {
+      eid_col <- trimws(as.character(exp_df$experiment_id))
+      hit <- exp_df[eid_col == trimws(selected_exp), , drop = FALSE]
+      if (nrow(hit) >= 1L) {
+        nm <- trimws(as.character(hit$experiment_name[1]))
+        if (nzchar(nm)) nm else selected_exp
+      } else {
+        selected_exp
+      }
+    } else {
+      selected_exp
+    }
     selected_plant <- trimws(input$plant_table_select)
     selected_plant_display <- if (nzchar(selected_plant)) selected_plant else "未选"
     hint <- if (!nzchar(selected_exp)) {
-      "📋 请先从左侧选择试验ID以筛选数据，或导入新试验"
+      "📋 请先在「种植配置」中选择种植地块与试验，或导入新试验"
     } else {
       "✅ 已筛选，可查看下方数据表或执行种植操作"
     }
-    list(exp_count = exp_count, rec_count = rec_count,
+    list(exp_count = exp_count, rec_count = rec_count, total_rows_sum = total_rows_sum,
          selected_exp = selected_exp_display, selected_plant = selected_plant_display,
          hint = hint)
   })
@@ -959,15 +1010,20 @@ buildDesignplotServer <- function(input, output) {
     tags$div(
       style = "background:#ffffff;border:1px solid #dbe4ee;border-radius:12px;padding:12px 16px;margin-bottom:14px;box-shadow:0 2px 8px rgba(15,23,42,0.06);",
       fluidRow(
-        column(3, tags$div(style = "text-align:center;",
+        column(2, tags$div(style = "text-align:center;",
           tags$span(as.character(s$exp_count), style = "font-size:28px;font-weight:700;color:#3b82f6;"),
           tags$br(),
           tags$span("试验数", style = "font-size:12px;color:#6b7280;")
         )),
-        column(3, tags$div(style = "text-align:center;",
+        column(2, tags$div(style = "text-align:center;",
           tags$span(as.character(s$rec_count), style = "font-size:28px;font-weight:700;color:#3b82f6;"),
           tags$br(),
           tags$span("记录数", style = "font-size:12px;color:#6b7280;")
+        )),
+        column(2, tags$div(style = "text-align:center;",
+          tags$span(as.character(s$total_rows_sum), style = "font-size:28px;font-weight:700;color:#3b82f6;"),
+          tags$br(),
+          tags$span("总行数", style = "font-size:12px;color:#6b7280;")
         )),
         column(3, tags$div(style = "text-align:center;",
           tags$span(s$selected_exp, style = "font-size:14px;font-weight:600;color:#1f2937;"),
@@ -1326,7 +1382,12 @@ buildDesignplotServer <- function(input, output) {
   sqliteExperiments <- reactive({
     experimentsTrigger()
     experiments <- readTableFromSqlite("experiments", sqlite_db_path)
-    if (!is.data.frame(experiments) || nrow(experiments) == 0) return(experiments)
+    stripExperimentTsCols <- function(df) {
+      if (!is.data.frame(df)) return(df)
+      drop_ts <- intersect(c("created_at", "updated_at"), names(df))
+      if (length(drop_ts) > 0) df[, setdiff(names(df), drop_ts), drop = FALSE] else df
+    }
+    if (!is.data.frame(experiments) || nrow(experiments) == 0) return(stripExperimentTsCols(experiments))
     filter_id <- trimws(input$sqliteFilterExperimentId)
     if (nzchar(filter_id) && "experiment_id" %in% names(experiments)) {
       experiments <- experiments[as.character(experiments$experiment_id) == filter_id, , drop = FALSE]
@@ -1352,7 +1413,7 @@ buildDesignplotServer <- function(input, output) {
       experiments$状态 <- status_col
       experiments$操作 <- btn_col
     }
-    experiments
+    stripExperimentTsCols(experiments)
   })
 
   sqliteExperimentRecords <- reactive({
