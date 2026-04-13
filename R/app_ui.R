@@ -23,7 +23,7 @@ buildDesignplotUI <- function(){
                             tags$div(
                               style = "background:#ffffff;border:1px solid #dbe4ee;border-radius:10px;padding:10px 12px;margin-bottom:10px;",
                               tags$div("基础参数", style = "font-size:15px;font-weight:600;color:#1f2937;margin-bottom:6px;"),
-                              textInput("get_water_columns", h5("田间纵向布局"), value="", placeholder = "w/8/w"),
+                              textInput("get_water_columns", h5("行设计"), value="", placeholder = "w/8/w"),
                               tags$p("w=水沟；r=纵向观察道；p=保护行；斜杠间数字=水沟间行数", style = "margin-top:-6px;color:#6b7280;font-size:12px;line-height:1.6;"),
                               textInput("bridges", h5("排设计"), value="", placeholder = "10,6/3,10"),
                               tags$p("格式：长度(m) 或 长度(m)/重复", style = "margin-top:-6px;color:#6b7280;font-size:12px;")
