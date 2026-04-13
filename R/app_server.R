@@ -112,6 +112,7 @@ buildDesignplotServer <- function(input, output) {
   planningInputsHydrated <- reactiveVal(FALSE)
   autoPersistLastPlanSig <- reactiveVal(NA_character_)
   autoPersistLastAssignSig <- reactiveVal(NA_character_)
+  lastValidDataset <- reactiveVal(NULL)
   fieldLayoutCache <- reactiveVal(list(key = NA_character_, data = NULL))
   pendingDeleteExpRowId <- reactiveVal(NULL)
   isPlantingInProgress <- reactiveVal(FALSE)
@@ -686,36 +687,43 @@ buildDesignplotServer <- function(input, output) {
   datasetInput <- reactive({
     fieldModelTrigger()
     req(isTRUE(planningInputsHydrated()))
-    validate(
-      need(nchar(input$get_water_columns) > 0, "请输入田间布局（如 w/8/w）"),
-      need(nchar(input$bridges) > 0, "请输入各条宽度（如 10,6/3,10）"),
-      need(!is.na(input$ww) && input$ww >= 0, "横向观察道宽度须为非负数"),
-      need(!is.na(input$w) && input$w >= 0, "材料间隔距离须为非负数"),
-      need(!is.na(input$subg) && input$subg >= 1, "分组大小须为正整数")
-    )
-    blocks <- length(modibridges(input$bridges))
-    y <- w_c()$total_cols
-    ww <- input$ww
-    w <- input$w
-    subg <- input$subg
-    bridges <- modibridges(input$bridges)
-    protected_columns <- w_c()$protect_cols
-    parsed_params <- tryCatch(
-      parseDesignInputParams(input$protected_blocks, input$p_a),
-      error = function(e) validate(need(FALSE, e$message))
-    )
-    protected_blocks <- parsed_params$protected_blocks
-    water_columns <- w_c()$water_cols
-    lane_columns <- w_c()$lane_cols
-    p_a <- parsed_params$p_a
-    design_from_left <- as.logical(input$design_from_left)
-    plant_from_left <- as.logical(input$plant_from_left)
-    designPlot(
-      blocks, y, bridges, ww, w,
-      protected_columns, protected_blocks,
-      water_columns, lane_columns, p_a,
-      design_from_left, plant_from_left, subg
-    )
+    tryCatch({
+      validate(
+        need(nchar(input$get_water_columns) > 0, "请输入田间布局（如 w/8/w）"),
+        need(nchar(input$bridges) > 0, "请输入各条宽度（如 10,6/3,10）"),
+        need(!is.na(input$ww) && input$ww >= 0, "横向观察道宽度须为非负数"),
+        need(!is.na(input$w) && input$w >= 0, "材料间隔距离须为非负数"),
+        need(!is.na(input$subg) && input$subg >= 1, "分组大小须为正整数")
+      )
+      blocks <- length(modibridges(input$bridges))
+      y <- w_c()$total_cols
+      ww <- input$ww
+      w <- input$w
+      subg <- input$subg
+      bridges <- modibridges(input$bridges)
+      protected_columns <- w_c()$protect_cols
+      parsed_params <- parseDesignInputParams(input$protected_blocks, input$p_a)
+      protected_blocks <- parsed_params$protected_blocks
+      water_columns <- w_c()$water_cols
+      lane_columns <- w_c()$lane_cols
+      p_a <- parsed_params$p_a
+      design_from_left <- as.logical(input$design_from_left)
+      plant_from_left <- as.logical(input$plant_from_left)
+      result <- designPlot(
+        blocks, y, bridges, ww, w,
+        protected_columns, protected_blocks,
+        water_columns, lane_columns, p_a,
+        design_from_left, plant_from_left, subg
+      )
+      lastValidDataset(result)
+      result
+    }, error = function(e) {
+      cached <- lastValidDataset()
+      if (is.matrix(cached) && nrow(cached) > 0 && ncol(cached) > 0) {
+        return(cached)
+      }
+      validate(need(FALSE, e$message))
+    })
   })
 
   datasetSelected <- reactive({ selectedCol(datasetInput()) })
