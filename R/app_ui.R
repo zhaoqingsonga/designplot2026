@@ -7,7 +7,7 @@ buildDesignplotUI <- function(){
                             tags$div(
                               style = "background:#f8fafc;border:1px solid #dbe4ee;border-radius:10px;padding:12px 12px 8px 12px;margin-bottom:10px;",
                               tags$div("地块管理", style = "font-size:16px;font-weight:600;color:#1f2937;margin-bottom:8px;"),
-                              selectInput("field_model_select", "当前参数", choices = c("常规地块1" = "常规地块1"), selected = "常规地块1", width = "100%"),
+不知                              selectInput("field_model_select", "当前参数", choices = c("常规地块1" = "常规地块1"), selected = "常规地块1", width = "100%"),
                               fluidRow(
                                 column(4, actionButton("saveFieldModel", "保存参数", class = "btn-primary", width = "100%")),
                                 column(4, actionButton("addFieldModel", "增加参数", class = "btn-success", width = "100%")),
@@ -18,7 +18,7 @@ buildDesignplotUI <- function(){
                                 column(6, actionButton("generatePlantField", "创建地块", class = "btn-info", width = "100%")),
                                 column(6, actionButton("deletePlantField", "删除地块", class = "btn-danger", width = "100%"))
                               ),
-                              tags$div("提示：设计表会实时更新；\"保存\"仅保存地块模板参数，\"创建地块\"才会写入可用于种植的地块表。", style = "font-size:12px;color:#6b7280;margin-top:8px;line-height:1.6;")
+                              tags$div("提示：设计表会实时更新；\"保存\"仅保存地块模板参数，\"创建地块\"才会写入可用于种植的地块表。删除参数前请先删除所创建的地块（点击「删除地块」）。", style = "font-size:12px;color:#6b7280;margin-top:8px;line-height:1.6;")
                             ),
                             tags$div(
                               style = "background:#ffffff;border:1px solid #dbe4ee;border-radius:10px;padding:10px 12px;margin-bottom:10px;",
@@ -115,11 +115,11 @@ buildDesignplotUI <- function(){
                               textInput("experimentPlantEndPos", "种植终止位置（行,列；留空=最后）", value = "", placeholder = "示例：10,8 / 10, / ,8 / 10"),
                               uiOutput("experimentPlantSummaryUi")
                             ),
-                            # Step 3: 区域补种（浅黄左边框）
+                            # Step 4: 区域补种（浅黄左边框）
                             tags$div(
                               style = "background:#fffbeb;border:1px solid #fcd34d;border-left:4px solid #f59e0b;border-radius:10px;padding:12px;margin-bottom:12px;",
                               fluidRow(
-                                column(1, tags$span("3", style = "background:#f59e0b;color:#fff;border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;")),
+                                column(1, tags$span("4", style = "background:#f59e0b;color:#fff;border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;")),
                                 column(11, tags$span("区域补种", style = "font-size:15px;font-weight:600;color:#1f2937;margin-left:6px;"))
                               ),
                               tags$div(style = "height:4px;"),
@@ -129,11 +129,12 @@ buildDesignplotUI <- function(){
                             )
                           ),
                           column(8,
-                            # 执行控制卡（蓝左边框）
+                            # 执行种植卡（蓝左边框）
                             tags$div(
                               style = "background:#ffffff;border:1px solid #dbe4ee;border-left:4px solid #3b82f6;border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 2px 8px rgba(15,23,42,0.06);",
                               fluidRow(
-                                column(12, tags$span("执行控制", style = "font-size:16px;font-weight:600;color:#1f2937;"))
+                                column(1, tags$span("3", style = "background:#3b82f6;color:#fff;border-radius:50%;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;")),
+                                column(11, tags$span("执行种植", style = "font-size:16px;font-weight:600;color:#1f2937;margin-left:6px;"))
                               ),
                               tags$div(style = "height:8px;"),
                               checkboxInput("allowExperimentReplant", "允许覆盖重种（默认关闭）", value = FALSE),

@@ -62,7 +62,7 @@ buildDesignplotServer <- function(input, output) {
                               linetype = type),
                 fill = NA, color = "#111827", linewidth = 1.0) +
       scale_fill_manual(values = fill_values, breaks = names(fill_values), name = "区域") +
-      scale_linetype_manual(values = c("补种" = "22"), breaks = "补种", name = "叠层") +
+      scale_linetype_manual(values = c("补种" = "22"), breaks = "补种", name = "") +
       scale_x_continuous(name = "行", breaks = seq(0, metrics$total_cols, by = max(1, floor(metrics$total_cols / 10))),
                          limits = c(0, metrics$total_cols + 1)) +
       scale_y_continuous(name = "排", breaks = seq(0, metrics$max_row_id + 2, by = 2),
@@ -352,7 +352,8 @@ buildDesignplotServer <- function(input, output) {
     target_name <- currentFieldModelName()
     showModal(modalDialog(
       title = "确认删除",
-      tags$p(paste0("确定要删除地块「", target_name, "」吗？删除后不可恢复。"), style = "margin:0;"),
+      tags$p(paste0("确定要删除地块参数「", target_name, "」吗？删除后不可恢复。"), style = "margin:0;"),
+      tags$p("若已通过「创建地块」生成种植表，须先点击「删除地块」删除所创建的地块后，才能删除本参数。", style = "margin:10px 0 0 0;color:#b45309;font-size:13px;line-height:1.5;"),
       footer = tagList(modalButton("取消"), actionButton("confirmDeleteFieldModel", "确认删除", class = "btn-danger")),
       easyClose = TRUE
     ))
@@ -361,12 +362,20 @@ buildDesignplotServer <- function(input, output) {
   observeEvent(input$confirmDeleteFieldModel, {
     tryCatch({
       removeModal()
-      deleteFieldModel(currentFieldModelName(), sqlite_db_path)
-      showNotification("地块模型删除成功", type = "message")
+      target_name <- currentFieldModelName()
+      plant_table_name <- createPlantTableName(target_name)
+      tables_df <- listPlantTables(sqlite_db_path)
+      if (is.data.frame(tables_df) && nrow(tables_df) > 0 &&
+          plant_table_name %in% tables_df$table_name) {
+        showNotification(paste0("参数「", target_name, "」已创建地块，请先删除地块后再删除参数"), type = "warning")
+        return(invisible(NULL))
+      }
+      deleteFieldModel(target_name, sqlite_db_path)
+      showNotification("参数删除成功", type = "message")
       fieldModelTrigger(fieldModelTrigger() + 1)
       refreshAllSqlite()
     }, error = function(e) {
-      showNotification(paste0("地块模型删除失败: ", e$message), type = "error")
+      showNotification(paste0("参数删除失败: ", e$message), type = "error")
     })
   })
 
@@ -1070,7 +1079,7 @@ buildDesignplotServer <- function(input, output) {
       if (isTRUE(state$runnable)) {
         actionButton("runExperimentPlanting", "执行试验种植", class = "btn-primary", width = "100%")
       } else {
-        actionButton("runExperimentPlanting", "执行试验种植（先修正上方设置）", class = "btn-default", width = "100%", disabled = "disabled")
+        actionButton("runExperimentPlanting", "执行试验种植（先选试验或修正设置）", class = "btn-default", width = "100%", disabled = "disabled")
       }
     }
   })
