@@ -105,6 +105,9 @@ buildDesignplotServer <- function(input, output) {
   fieldLayoutCache <- reactiveVal(list(key = NA_character_, data = NULL))
   pendingDeleteExpRowId <- reactiveVal(NULL)
   isPlantingInProgress <- reactiveVal(FALSE)
+  # 各 Tab 共用的当前种植表（*.plant 表名）；四个下拉框由此同步
+  activePlantTableName <- reactiveVal(NA_character_)
+  unifiedPlantSelectBusy <- reactiveVal(FALSE)
 
   # ===========================================================================
   # 元数据与默认值
@@ -214,37 +217,103 @@ buildDesignplotServer <- function(input, output) {
   })
 
   # ===========================================================================
-  # 观察者：种植地块下拉框
+  # 统一「当前种植地块」：种植展示 / 种植试验 / 播种列表 / 田间布局图 四下拉同步
   # ===========================================================================
+  pushUnifiedPlantSelects <- function(plant_table_name, tables_df, sow_df) {
+    session <- getDefaultReactiveDomain()
+    unifiedPlantSelectBusy(TRUE)
+    on.exit(unifiedPlantSelectBusy(FALSE), add = TRUE)
+    if (!is.data.frame(tables_df) || nrow(tables_df) == 0) {
+      updateSelectInput(session, "plant_table_select", choices = c("暂无地块" = ""), selected = "")
+      updateSelectInput(session, "experimentPlantTableSelect", choices = c("暂无地块" = ""), selected = "")
+      updateSelectInput(session, "layout_field_select", choices = c("暂无地块" = ""), selected = "")
+      updateSelectInput(session, "sow_table_select", choices = c("暂无播种表" = ""), selected = "")
+      return(invisible(NULL))
+    }
+    valid_plants <- as.character(tables_df$table_name)
+    p <- trimws(as.character(plant_table_name))
+    if (!nzchar(p) || !(p %in% valid_plants)) p <- valid_plants[1]
+    plant_choices <- stats::setNames(valid_plants, valid_plants)
+    updateSelectInput(session, "plant_table_select", choices = plant_choices, selected = p)
+    updateSelectInput(session, "experimentPlantTableSelect", choices = plant_choices, selected = p)
+    field_name <- {
+      row_hit <- match(p, tables_df$table_name)
+      if (!is.na(row_hit)) as.character(tables_df$field_name[row_hit]) else sub("\\.plant$", "", p)
+    }
+    layout_choices <- stats::setNames(as.character(tables_df$field_name), as.character(tables_df$field_name))
+    updateSelectInput(session, "layout_field_select", choices = layout_choices, selected = field_name)
+    if (is.data.frame(sow_df) && nrow(sow_df) > 0) {
+      sow_choices <- stats::setNames(as.character(sow_df$table_name), as.character(sow_df$field_name))
+      sow_match <- as.character(sow_df$table_name)[as.character(sow_df$field_name) == field_name]
+      sow_sel <- if (length(sow_match) >= 1L) sow_match[1] else as.character(sow_df$table_name[1])
+      updateSelectInput(session, "sow_table_select", choices = sow_choices, selected = sow_sel)
+    } else {
+      updateSelectInput(session, "sow_table_select", choices = c("暂无播种表" = ""), selected = "")
+    }
+    invisible(NULL)
+  }
+
+  setActivePlantTable <- function(plant_table_name) {
+    tables_df <- shiny::isolate(plantTables())
+    sow_df <- shiny::isolate(sowTables())
+    if (!is.data.frame(tables_df) || nrow(tables_df) == 0) {
+      activePlantTableName(NA_character_)
+      pushUnifiedPlantSelects("", tables_df, sow_df)
+      return(invisible(NULL))
+    }
+    valid_plants <- as.character(tables_df$table_name)
+    p <- trimws(as.character(plant_table_name))
+    if (!nzchar(p) || !(p %in% valid_plants)) p <- valid_plants[1]
+    activePlantTableName(p)
+    pushUnifiedPlantSelects(p, tables_df, sow_df)
+    invisible(NULL)
+  }
+
   observe({
     tables_df <- plantTables()
+    sow_df <- sowTables()
     if (!is.data.frame(tables_df) || nrow(tables_df) == 0) {
-      updateSelectInput(session = getDefaultReactiveDomain(), inputId = "plant_table_select", choices = c("暂无地块" = ""), selected = "")
-      updateSelectInput(session = getDefaultReactiveDomain(), inputId = "experimentPlantTableSelect", choices = c("暂无地块" = ""), selected = "")
-      return()
+      activePlantTableName(NA_character_)
+      pushUnifiedPlantSelects("", tables_df, sow_df)
+      return(invisible(NULL))
     }
-    choices <- stats::setNames(as.character(tables_df$table_name), as.character(tables_df$table_name))
-    current <- trimws(input$plant_table_select)
-    selected <- if (nzchar(current) && current %in% names(choices)) current else as.character(tables_df$table_name[1])
-    updateSelectInput(session = getDefaultReactiveDomain(), inputId = "plant_table_select", choices = choices, selected = selected)
-    # 同步 experimentPlantTableSelect
-    exp_current <- trimws(input$experimentPlantTableSelect)
-    exp_selected <- if (nzchar(exp_current) && exp_current %in% names(choices)) exp_current else selected
-    updateSelectInput(session = getDefaultReactiveDomain(), inputId = "experimentPlantTableSelect", choices = choices, selected = exp_selected)
+    valid_plants <- as.character(tables_df$table_name)
+    cur <- shiny::isolate(activePlantTableName())
+    cur <- trimws(as.character(cur))
+    p <- if (nzchar(cur) && cur %in% valid_plants) cur else valid_plants[1]
+    activePlantTableName(p)
+    pushUnifiedPlantSelects(p, tables_df, sow_df)
   })
 
-  # ===========================================================================
-  observe({
-    tables <- sowTables()
-    if (!is.data.frame(tables) || nrow(tables) == 0) {
-      updateSelectInput(session = getDefaultReactiveDomain(), inputId = "sow_table_select", choices = c("暂无播种表" = ""), selected = "")
-      return()
-    }
-    choices <- setNames(as.character(tables$table_name), as.character(tables$field_name))
-    current <- input$sow_table_select
-    selected <- if (!is.null(current) && nzchar(trimws(current)) && current %in% unname(choices)) current else unname(choices)[1]
-    updateSelectInput(session = getDefaultReactiveDomain(), inputId = "sow_table_select", choices = choices, selected = selected)
-  })
+  observeEvent(input$plant_table_select, {
+    if (isTRUE(shiny::isolate(unifiedPlantSelectBusy()))) return(invisible(NULL))
+    v <- trimws(input$plant_table_select)
+    if (!nzchar(v)) return(invisible(NULL))
+    setActivePlantTable(v)
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$experimentPlantTableSelect, {
+    if (isTRUE(shiny::isolate(unifiedPlantSelectBusy()))) return(invisible(NULL))
+    v <- trimws(input$experimentPlantTableSelect)
+    if (!nzchar(v)) return(invisible(NULL))
+    setActivePlantTable(v)
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$layout_field_select, {
+    if (isTRUE(shiny::isolate(unifiedPlantSelectBusy()))) return(invisible(NULL))
+    f <- trimws(input$layout_field_select)
+    if (!nzchar(f)) return(invisible(NULL))
+    setActivePlantTable(createPlantTableName(f))
+  }, ignoreInit = TRUE)
+
+  observeEvent(input$sow_table_select, {
+    if (isTRUE(shiny::isolate(unifiedPlantSelectBusy()))) return(invisible(NULL))
+    s <- trimws(input$sow_table_select)
+    if (!nzchar(s)) return(invisible(NULL))
+    f <- sub("\\.sow$", "", s)
+    if (!nzchar(f)) return(invisible(NULL))
+    setActivePlantTable(createPlantTableName(f))
+  }, ignoreInit = TRUE)
 
   # ===========================================================================
   # 观察者：试验下拉框
@@ -294,22 +363,6 @@ buildDesignplotServer <- function(input, output) {
     if (nzchar(cur) && identical(cur, target)) {
       pendingSqliteExperimentSelection(NULL)
     }
-  })
-
-  # ===========================================================================
-  # 观察者：田间布局图地块下拉框
-  # ===========================================================================
-  observe({
-    plantTableTrigger()
-    tables_df <- listPlantTables(sqlite_db_path)
-    if (!is.data.frame(tables_df) || nrow(tables_df) == 0) {
-      updateSelectInput(session = getDefaultReactiveDomain(), inputId = "layout_field_select", choices = c("暂无地块" = ""), selected = "")
-      return()
-    }
-    choices <- stats::setNames(as.character(tables_df$field_name), as.character(tables_df$field_name))
-    current <- input$layout_field_select
-    selected <- if (!is.null(current) && nzchar(trimws(current)) && current %in% names(choices)) current else as.character(tables_df$field_name[1])
-    updateSelectInput(session = getDefaultReactiveDomain(), inputId = "layout_field_select", choices = choices, selected = selected)
   })
 
   # ===========================================================================
@@ -369,7 +422,7 @@ buildDesignplotServer <- function(input, output) {
       clearSowTableByPlantTable(save_result$table_name, sqlite_db_path)
       plantTableTrigger(plantTableTrigger() + 1)
       refreshSow()
-      updateSelectInput(session = getDefaultReactiveDomain(), inputId = "plant_table_select", selected = save_result$table_name)
+      setActivePlantTable(save_result$table_name)
       showNotification(paste0("已生成种植地块：", save_result$table_name, "；防重复锁与播种列表已同步重置"), type = "message")
     }, error = function(e) {
       showNotification(paste0("生成种植地块失败: ", e$message), type = "error")
@@ -846,15 +899,34 @@ buildDesignplotServer <- function(input, output) {
   })
 
   selectedPlantTableName <- reactive({
-    selected <- trimws(input$plant_table_select)
-    if (!nzchar(selected)) return(NA_character_)
-    selected
+    plantTableTrigger()
+    ap <- activePlantTableName()
+    if (length(ap) != 1L || is.na(ap)) return(NA_character_)
+    ap <- trimws(as.character(ap))
+    if (!nzchar(ap)) NA_character_ else ap
   })
 
   selectedExperimentPlantTableName <- reactive({
-    selected <- trimws(input$plant_table_select)
-    if (!nzchar(selected)) return(NA_character_)
-    selected
+    selectedPlantTableName()
+  })
+
+  selectedLayoutFieldName <- reactive({
+    plantTableTrigger()
+    p <- selectedPlantTableName()
+    if (is.na(p) || !nzchar(p)) return(NA_character_)
+    sub("\\.plant$", "", p)
+  })
+
+  selectedSowTableName <- reactive({
+    sowTrigger()
+    plantTableTrigger()
+    field <- selectedLayoutFieldName()
+    if (is.na(field) || !nzchar(field)) return(NA_character_)
+    sow_df <- sowTables()
+    if (!is.data.frame(sow_df) || nrow(sow_df) == 0) return(NA_character_)
+    sm <- as.character(sow_df$table_name[as.character(sow_df$field_name) == field])
+    if (length(sm) >= 1L) return(sm[1])
+    as.character(sow_df$table_name[1])
   })
 
   selectedExperimentPlantBaseMatrix <- reactive({
@@ -908,8 +980,10 @@ buildDesignplotServer <- function(input, output) {
   experimentPlantedState <- reactiveVal(NULL)
 
   experimentFillPreview <- reactive({
+    plantTableTrigger()
     exp_id <- trimws(input$sqliteFilterExperimentId)
-    table_name <- trimws(input$plant_table_select)
+    pt <- selectedPlantTableName()
+    table_name <- if (is.na(pt)) "" else trimws(as.character(pt))
     material <- trimws(input$experimentFillMaterial)
     if (!nzchar(exp_id) || !nzchar(table_name)) {
       return(list(level = "info", runnable = FALSE, message = "ℹ️ 补种摘要：请选择试验与种植地块", parsed = NULL, base_matrix = NULL, data_cols = NA_integer_))
@@ -961,6 +1035,7 @@ buildDesignplotServer <- function(input, output) {
   experimentStatusSummary <- reactive({
     experimentsTrigger()
     recordsTrigger()
+    plantTableTrigger()
     exp_df <- readTableFromSqlite("experiments", sqlite_db_path)
     rec_df <- readTableFromSqlite("experiment_records", sqlite_db_path)
     exp_count <- if (is.data.frame(exp_df) && nrow(exp_df) > 0) nrow(exp_df) else 0L
@@ -993,8 +1068,8 @@ buildDesignplotServer <- function(input, output) {
     } else {
       selected_exp
     }
-    selected_plant <- trimws(input$plant_table_select)
-    selected_plant_display <- if (nzchar(selected_plant)) selected_plant else "未选"
+    pt <- selectedPlantTableName()
+    selected_plant_display <- if (!is.na(pt) && nzchar(trimws(as.character(pt)))) trimws(as.character(pt)) else "未选"
     hint <- if (!nzchar(selected_exp)) {
       "📋 请先在「种植配置」中选择种植地块与试验，或导入新试验"
     } else {
@@ -1060,8 +1135,7 @@ buildDesignplotServer <- function(input, output) {
       experimentPlantedState(list(table_name = selected_plant_table, matrix = updated_matrix))
       plantTableTrigger(plantTableTrigger() + 1)
       refreshSow()
-      updateSelectInput(session = getDefaultReactiveDomain(), inputId = "plant_table_select", selected = selected_plant_table)
-      updateSelectInput(session = getDefaultReactiveDomain(), inputId = "experimentPlantTableSelect", selected = selected_plant_table)
+      setActivePlantTable(selected_plant_table)
       showNotification(paste0("区域补种完成：已补 ", fill_res$filled_count, " 个未种位；结果写入 ", selected_plant_table, " 与 ", sow_result$table_name), type = "message")
     }, error = function(e) {
       showNotification(paste0("区域补种失败: ", e$message), type = "error")
@@ -1069,8 +1143,10 @@ buildDesignplotServer <- function(input, output) {
   })
 
   experimentPlantValidation <- reactive({
+    plantTableTrigger()
     exp_id <- trimws(input$sqliteFilterExperimentId)
-    table_name <- trimws(input$plant_table_select)
+    pt <- selectedPlantTableName()
+    table_name <- if (is.na(pt)) "" else trimws(as.character(pt))
     if (!nzchar(exp_id) || !nzchar(table_name)) {
       return(list(level = "info", runnable = FALSE, message = "ℹ️ 执行摘要：请选择试验与种植地块"))
     }
@@ -1171,8 +1247,7 @@ buildDesignplotServer <- function(input, output) {
     )
     savePlantTable(field_name = sub("\\.plant$", "", selected_plant_table), plan_matrix = planted, db_path = sqlite_db_path)
     plantTableTrigger(plantTableTrigger() + 1)
-    updateSelectInput(session = getDefaultReactiveDomain(), inputId = "plant_table_select", selected = selected_plant_table)
-    updateSelectInput(session = getDefaultReactiveDomain(), inputId = "experimentPlantTableSelect", selected = selected_plant_table)
+    setActivePlantTable(selected_plant_table)
 
     exp_df <- experimentOptions()
     exp_name <- if (is.data.frame(exp_df) && nrow(exp_df) > 0 && exp_id %in% as.character(exp_df$experiment_id)) {
@@ -1284,8 +1359,9 @@ buildDesignplotServer <- function(input, output) {
 
   currentSowData <- reactive({
     sowTrigger()
-    selected_table <- trimws(input$sow_table_select)
-    validate(need(nzchar(selected_table), "请先选择播种地块"))
+    selected_table <- selectedSowTableName()
+    validate(need(!is.na(selected_table) && nzchar(trimws(as.character(selected_table))), "请先选择播种地块"))
+    selected_table <- trimws(as.character(selected_table))
     sow_df <- readSowTable(selected_table, sqlite_db_path)
     validate(need(is.data.frame(sow_df) && nrow(sow_df) > 0, paste0("暂无播种表：", selected_table)))
 
@@ -1310,7 +1386,8 @@ buildDesignplotServer <- function(input, output) {
   output$sowIntegrityUi <- renderUI({
     sowTrigger()
     plantTableTrigger()
-    selected_table <- trimws(input$sow_table_select)
+    st <- selectedSowTableName()
+    selected_table <- if (!is.na(st)) trimws(as.character(st)) else ""
     if (!nzchar(selected_table)) {
       return(tags$div(style = "background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;padding:8px 10px;margin-bottom:8px;color:#3730a3;", "ℹ️ 完整性检查：请先选择播种地块"))
     }
@@ -1492,7 +1569,8 @@ buildDesignplotServer <- function(input, output) {
                                                         content = function(file) { write.csv(sqliteExperimentRecords(), file, row.names = FALSE, fileEncoding = "UTF-8") })
   output$downloadSowListXlsx <- downloadHandler(
     filename = function() {
-      selected_table <- trimws(input$sow_table_select)
+      st <- selectedSowTableName()
+      selected_table <- if (!is.na(st)) trimws(as.character(st)) else ""
       base_name <- if (nzchar(selected_table)) sub("\\.sow$", "", selected_table) else "sow_list"
       paste0(base_name, "_sow_list.xlsx")
     },
@@ -1524,7 +1602,8 @@ buildDesignplotServer <- function(input, output) {
   fieldLayoutCacheKey <- reactive({
     plantTableTrigger()
     sowTrigger()
-    simplified_name <- trimws(input$layout_field_select)
+    sn <- selectedLayoutFieldName()
+    simplified_name <- if (!is.na(sn)) trimws(as.character(sn)) else ""
     if (!nzchar(simplified_name)) return("empty")
     selected_table <- getFullTableName(simplified_name)
     paste0(selected_table, "|", plantTableTrigger(), "|", sowTrigger())
@@ -1538,7 +1617,8 @@ buildDesignplotServer <- function(input, output) {
       return(cached$data)
     }
 
-    simplified_name <- trimws(input$layout_field_select)
+    sn <- selectedLayoutFieldName()
+    simplified_name <- if (!is.na(sn)) trimws(as.character(sn)) else ""
     validate(need(nzchar(simplified_name), "请先选择地块"))
 
     tryCatch({
@@ -1744,7 +1824,8 @@ buildDesignplotServer <- function(input, output) {
     layout_df <- fieldLayoutData()
     validate(need(nrow(layout_df) > 0, "暂无已种植的实验数据"))
 
-    simplified_name <- trimws(input$layout_field_select)
+    sn <- selectedLayoutFieldName()
+    simplified_name <- if (!is.na(sn)) trimws(as.character(sn)) else ""
     selected_table <- getFullTableName(simplified_name)
     plant_matrix <- readPlantTable(selected_table, sqlite_db_path)
     metrics <- computeLayoutPlotMetrics(plant_matrix)
@@ -1756,7 +1837,8 @@ buildDesignplotServer <- function(input, output) {
   # ---- 田间布局图下载（使用共享函数）----
   output$downloadFieldLayoutPlot <- downloadHandler(
     filename = function() {
-      selected <- trimws(input$layout_field_select)
+      sn <- selectedLayoutFieldName()
+      selected <- if (!is.na(sn)) trimws(as.character(sn)) else ""
       base_name <- if (nzchar(selected)) selected else "field_layout"
       paste0(base_name, "_layout.png")
     },
@@ -1764,7 +1846,8 @@ buildDesignplotServer <- function(input, output) {
       layout_df <- fieldLayoutData()
       validate(need(nrow(layout_df) > 0, "暂无可导出的布局图数据"))
 
-      simplified_name <- trimws(input$layout_field_select)
+      sn <- selectedLayoutFieldName()
+      simplified_name <- if (!is.na(sn)) trimws(as.character(sn)) else ""
       selected_table <- getFullTableName(simplified_name)
       plant_matrix <- readPlantTable(selected_table, sqlite_db_path)
       metrics <- computeLayoutPlotMetrics(plant_matrix)

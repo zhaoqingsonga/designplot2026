@@ -179,6 +179,7 @@ buildDesignplotUI <- function(){
                         fluidRow(column(12,
                                         tags$div(style = "background:#ffffff;border:1px solid #dbe4ee;border-radius:12px;padding:14px 14px 10px 14px;box-shadow:0 2px 8px rgba(15,23,42,0.06);",
                                                  h4("种植地块预览", style = "margin-top:0;margin-bottom:10px;"),
+                                                 tags$p("与「种植试验」「播种列表」「田间布局图」共用当前地块，任一处切换会同步。", style = "font-size:12px;color:#6b7280;margin:0 0 8px 0;line-height:1.5;"),
                                                  selectInput("plant_table_select", "选择种植地块", choices = c("暂无地块" = ""), selected = "", width = "100%"),
                                                  DT::dataTableOutput("selectedPlantPlotPreview"),
                                                  downloadButton("plantPreviewDownloadData", "下载种植展示（xlsx）")
@@ -186,6 +187,7 @@ buildDesignplotUI <- function(){
                tabPanel("播种列表",
                         mainPanel(
                           h4("播种列表"),
+                          tags$p("播种表随当前地块自动对齐；与种植展示、田间布局图所选地块一致。", style = "font-size:12px;color:#6b7280;margin:0 0 8px 0;line-height:1.5;"),
                           actionButton("refreshSowList", "刷新播种列表", class = "btn-default"),
                           tags$div(style = "height:8px;"),
                           selectInput("sow_table_select", "选择播种地块", choices = c("暂无播种表" = ""), selected = "", width = "100%"),
@@ -197,6 +199,7 @@ buildDesignplotUI <- function(){
                         fluidRow(column(12,
                                         tags$div(style = "background:#ffffff;border:1px solid #dbe4ee;border-radius:12px;padding:14px 14px 10px 14px;box-shadow:0 2px 8px rgba(15,23,42,0.06);",
                                                   h4("田间布局总览", style = "margin-top:0;margin-bottom:10px;"),
+                                                  tags$p("布局图地块与种植展示、播种列表共用；切换即切换全局当前地块。", style = "font-size:12px;color:#6b7280;margin:0 0 8px 0;line-height:1.5;"),
                                                   selectInput("layout_field_select", "选择地块", choices = c("暂无地块" = ""), selected = "", width = "100%"),
                                                   uiOutput("fieldLayoutError"),
                                                    plotOutput("fieldLayoutPlot", height = "600px"),
