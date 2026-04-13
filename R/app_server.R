@@ -153,7 +153,7 @@ buildDesignplotServer <- function(input, output) {
         "常规地块1",
         list(
           field_len = 200, no_plant = "", field_layout = "w/8/w",
-          strip_width = "10,6/3,10", protect_strip = "1",
+          strip_width = "10,6/3,10", protect_strip = "",
           cross_path_width = 1, row_gap = 0.5, group_rows = 1,
           plant_start_pos = "1,1", plant_end_pos = "",
           plan_left = TRUE, plant_left = TRUE

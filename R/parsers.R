@@ -271,6 +271,13 @@ parseDesignInputParams<-function(protected_blocks_text, p_a_text){
   if(length(protected_blocks)>0 && any(is.na(protected_blocks))){
     stop("横向保护行必须为数字，逗号分隔")
   }
+  if(length(protected_blocks)>0 && any(protected_blocks < 0)){
+    stop("横向保护行不能为负数")
+  }
+  # 约定：留空或输入 0 表示无横向保护行
+  if(length(protected_blocks)>0){
+    protected_blocks <- protected_blocks[protected_blocks > 0]
+  }
 
   if(nchar(trimws(p_a_text))>0){
     p_a_raw<-trimws(unlist(strsplit(p_a_text,',')))

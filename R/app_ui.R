@@ -25,28 +25,30 @@ buildDesignplotUI <- function(){
                               tags$div("基础参数", style = "font-size:15px;font-weight:600;color:#1f2937;margin-bottom:6px;"),
                               textInput("get_water_columns", h5("田间纵向布局"), value="", placeholder = "w/8/w"),
                               tags$p("w=水沟；r=纵向观察道；p=保护行；斜杠间数字=水沟间行数", style = "margin-top:-6px;color:#6b7280;font-size:12px;line-height:1.6;"),
-                              textInput("bridges", h5("条带宽度设置"), value="", placeholder = "10,6/3,10"),
-                              tags$p("格式：长度,宽度/重复数", style = "margin-top:-6px;color:#6b7280;font-size:12px;")
+                              textInput("bridges", h5("排设计"), value="", placeholder = "10,6/3,10"),
+                              tags$p("格式：长度(m) 或 长度(m)/重复", style = "margin-top:-6px;color:#6b7280;font-size:12px;")
                             ),
                             tags$div(
                               style = "background:#ffffff;border:1px solid #dbe4ee;border-radius:10px;padding:10px 12px;margin-bottom:10px;",
-                              tags$div("通道与间隔", style = "font-size:15px;font-weight:600;color:#1f2937;margin-bottom:6px;"),
+                              tags$div("观察道与材料分组", style = "font-size:15px;font-weight:600;color:#1f2937;margin-bottom:6px;"),
                               numericInput("ww", h5("横向观察道宽(m)"), value = NA, min = 0),
                               numericInput("w", h5("材料间隔(m)"), value = NA, min = 0),
                               numericInput("subg", h5("组内不隔断行数"), value = NA, min = 1)
                             ),
                             tags$details(
-                              tags$summary("高级参数"),
+                              style = "background:#f8fafc;border:1px dashed #cbd5e1;border-radius:8px;padding:8px 10px;",
+                              tags$summary(tags$span("▶ 高级参数（点击展开/收起）", style = "font-weight:600;color:#1f2937;cursor:pointer;")),
                               tags$div(style = "margin-top:8px;",
                                 textInput("p_a", h5("不可种植区"), value="", placeholder = "23,25,3,5,30,40,7,10"),
-                                textInput("protected_blocks", h5("横向保护行"), value="", placeholder = "1"),
+                                textInput("protected_blocks", h5("横向保护行"), value="", placeholder = "留空或0=无；示例：1,3"),
                                 tags$div(style = "height:10px;"),
                                 tags$div("种植方向", style = "font-size:14px;font-weight:600;color:#1f2937;margin-bottom:4px;"),
                                 radioButtons("design_from_left", h5("地块编号方向"), choices = list("从左" = TRUE, "从右" = FALSE), selected = TRUE, inline = TRUE),
                                 radioButtons("plant_from_left", h5("材料排种方向"), choices = list("从左" = TRUE, "从右" = FALSE), selected = TRUE, inline = TRUE),
                                 tags$div(style = "height:10px;"),
                                 tags$details(
-                                  tags$summary("编码图例"),
+                                  style = "background:#ffffff;border:1px dashed #d1d5db;border-radius:6px;padding:6px 8px;",
+                                  tags$summary(tags$span("▶ 编码图例（点击展开/收起）", style = "font-weight:600;color:#374151;cursor:pointer;")),
                                   tags$div(style = "margin-top:6px;",
                                     p("表中",
                                       span("正整数", style = "background-color:yellow"),
