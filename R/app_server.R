@@ -964,6 +964,8 @@ buildDesignplotServer <- function(input, output) {
 
   experimentOptions <- reactive({
     experimentsTrigger()
+    recordsTrigger()
+    plantTableTrigger()
     exp_df <- readTableFromSqlite("experiments", sqlite_db_path)
     if (!is.data.frame(exp_df) || nrow(exp_df) == 0) return(data.frame())
     exp_df
