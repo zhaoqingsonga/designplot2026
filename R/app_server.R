@@ -1002,12 +1002,11 @@ buildDesignplotServer <- function(input, output) {
 
   experimentFillPreview <- reactive({
     plantTableTrigger()
-    exp_id <- trimws(input$sqliteFilterExperimentId)
     pt <- selectedPlantTableName()
     table_name <- if (is.na(pt)) "" else trimws(as.character(pt))
     material <- trimws(input$experimentFillMaterial)
-    if (!nzchar(exp_id) || !nzchar(table_name)) {
-      return(list(level = "info", runnable = FALSE, message = "ℹ️ 补种摘要：请选择试验与种植地块", parsed = NULL, base_matrix = NULL, data_cols = NA_integer_))
+    if (!nzchar(table_name)) {
+      return(list(level = "info", runnable = FALSE, message = "ℹ️ 补种摘要：请选择种植地块", parsed = NULL, base_matrix = NULL, data_cols = NA_integer_))
     }
     if (!nzchar(material)) {
       return(list(level = "neutral", runnable = FALSE, message = "ℹ️ 补种摘要：请输入补种材料名称", parsed = NULL, base_matrix = NULL, data_cols = NA_integer_))
@@ -1015,7 +1014,7 @@ buildDesignplotServer <- function(input, output) {
     base_matrix <- tryCatch(selectedExperimentPlantBaseMatrix(), error = function(e) NULL)
     if (is.null(base_matrix) || !is.matrix(base_matrix) || ncol(base_matrix) <= STAT_COL_COUNT) {
       return(list(level = "neutral", runnable = FALSE,
-                  message = paste0("ℹ️ 补种摘要：试验=", exp_id, "；地块=", table_name, "（地块数据不可用）"),
+                  message = paste0("ℹ️ 补种摘要：地块=", table_name, "（地块数据不可用）"),
                   parsed = NULL, base_matrix = NULL, data_cols = NA_integer_))
     }
     data_cols <- ncol(base_matrix) - STAT_COL_COUNT
