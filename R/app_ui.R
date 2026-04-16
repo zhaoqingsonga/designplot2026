@@ -112,8 +112,8 @@ buildDesignplotUI <- function(){
                               tags$div(style = "height:4px;"),
                               selectInput("experimentPlantTableSelect", "选择种植地块", choices = c("暂无地块" = ""), selected = ""),
                               selectInput("sqliteFilterExperimentId", "选择试验", choices = c("全部试验" = ""), selected = "", width = "100%"),
-                              textInput("experimentPlantStartPos", "种植起始位置（行,列）", value = "1,1", placeholder = "示例：1,1 / 1, / ,3 / 1"),
-                              textInput("experimentPlantEndPos", "种植终止位置（行,列；留空=最后）", value = "", placeholder = "示例：10,8 / 10, / ,8 / 10"),
+                              textInput("experimentPlantStartPos", "种植起始位置（排,行）", value = "1,1", placeholder = "示例：1,1 / 1, / ,3 / 1"),
+                              textInput("experimentPlantEndPos", "种植终止位置（排,行；留空=最后）", value = "", placeholder = "示例：10,8 / 10, / ,8 / 10"),
                               uiOutput("experimentPlantSummaryUi")
                             )
                           )
