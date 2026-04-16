@@ -37,6 +37,12 @@ buildDesignplotServer <- function(input, output) {
 
   # 构建田间布局 ggplot 对象（output 与 download 共用）
   buildFieldLayoutGgplot <- function(layout_df, plant_matrix, simplified_name, metrics) {
+    normalizeSupplementLabel <- function(x) {
+      x <- trimws(as.character(x))
+      x <- sub("^补种\\s*[:：-]\\s*", "", x)
+      ifelse(nzchar(x), paste0(x, "（补种）"), "补种")
+    }
+
     fill_values <- stats::setNames(as.character(layout_df$color), as.character(layout_df$name))
     fill_values <- fill_values[!duplicated(names(fill_values))]
     fill_values <- fill_values[!is.na(fill_values) & fill_values != "NA"]
@@ -44,6 +50,18 @@ buildDesignplotServer <- function(input, output) {
     exp_df <- layout_df[layout_df$type == "实验", , drop = FALSE]
     special_df <- layout_df[layout_df$type == "特殊区域", , drop = FALSE]
     supplement_df <- layout_df[layout_df$type == "补种", , drop = FALSE]
+    if (nrow(supplement_df) > 0) {
+      supplement_df$supplement_label <- normalizeSupplementLabel(supplement_df$name)
+      supplement_stats <- stats::aggregate(
+        x = list(area_cells = supplement_df$rows * supplement_df$cols),
+        by = list(supplement_label = supplement_df$supplement_label),
+        FUN = sum
+      )
+      supplement_stats$supplement_label <- as.character(supplement_stats$supplement_label)
+      supplement_stats$display_label <- paste0(supplement_stats$supplement_label, "（", supplement_stats$area_cells, "格）")
+      label_map <- stats::setNames(supplement_stats$display_label, supplement_stats$supplement_label)
+      supplement_df$supplement_display <- unname(label_map[supplement_df$supplement_label])
+    }
 
     p <- ggplot() +
       geom_rect(data = exp_df,
@@ -59,13 +77,18 @@ buildDesignplotServer <- function(input, output) {
       scale_fill_manual(values = fill_values, breaks = names(fill_values), name = "区域")
 
     if (nrow(supplement_df) > 0) {
+      supplement_breaks <- unique(as.character(supplement_df$supplement_display))
+      supplement_colors <- stats::setNames(
+        grDevices::hcl.colors(length(supplement_breaks), palette = "Dark 3"),
+        supplement_breaks
+      )
       p <- p +
         geom_rect(data = supplement_df,
                   mapping = aes(xmin = start_col - 0.5, xmax = end_col + 0.5,
                                 ymin = start_row - 0.5, ymax = end_row + 0.5,
-                                linetype = type),
-                  fill = NA, color = "#111827", linewidth = 1.0) +
-        scale_linetype_manual(values = c("补种" = "22"), breaks = "补种", name = "")
+                                color = supplement_display),
+                  fill = NA, linetype = "22", linewidth = 1.0) +
+        scale_color_manual(values = supplement_colors, breaks = supplement_breaks, name = "补种材料")
     }
 
     p +
@@ -75,7 +98,7 @@ buildDesignplotServer <- function(input, output) {
                          limits = c(0, metrics$max_row_id + 0.5), expand = c(0, 0)) +
       coord_fixed(ratio = metrics$aspect_ratio) +
       (if (nrow(supplement_df) > 0) {
-        guides(fill = guide_legend(ncol = 2, byrow = TRUE), linetype = guide_legend(order = 2))
+        guides(fill = guide_legend(ncol = 2, byrow = TRUE), color = guide_legend(order = 2))
       } else {
         guides(fill = guide_legend(ncol = 2, byrow = TRUE))
       }) +
